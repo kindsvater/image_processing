@@ -1,0 +1,24 @@
+{
+  "name": "jpeg2ascii",
+  "version": "1.0.0",
+  "description": "ls",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jkinsfat/ascii-gen.git"
+  },
+  "author": "Jason Kinsfather",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jkinsfat/ascii-gen/issues"
+  },
+  "homepage": "https://github.com/jkinsfat/ascii-gen#readme",
+  "dependencies": {
+    "body-parser": "^1.18.3",
+    "caman": "^4.1.2",
+    "express": "^4.16.3"
+  }
+}
