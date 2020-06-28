@@ -4,7 +4,7 @@ let green_value = pixel => pixel[2]
 let blue_value = pixel => pixel[3]
 let rgbLuminosity = pixel => 0.21 * red_value(pixel) + 0.72 * green_value(pixel) + 0.07 * blue_value(pixel)
 let rgbAverage = pixel => (red_value(pixel) + green_value(pixel) + blue_value(pixel)) / 3
-let rgbLightness = pixel => (Math.max([red_value(pixel), green_value(pixel), blue_value(pixel)]) + Math.min([red_value(pixel), green_value(pixel), blue_value(pixel)])) / 2
+let rgbLightness = pixel => (Math.max(red_value(pixel), green_value(pixel), blue_value(pixel)) + Math.min(red_value(pixel), green_value(pixel), blue_value(pixel))) / 2
 const ASCIIByDensity = "`^\",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
 
 let mapToXItems = (arr, x, callback) => {
