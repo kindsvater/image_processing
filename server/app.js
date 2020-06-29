@@ -1,16 +1,14 @@
+const http = require('http');
 const express = require('express');
 const path = require('path');
 const app = express();
-const bodyParser = require('body-parser');
-const HOST = 8000
+const port = 3000;
 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, './../public/')));
 
 var routes_setter = require('./routes.js');
 routes_setter(app);
 
-app.listen(HOST, function() {
-    console.log('listening on port ' + HOST);
-})
+let server = http.createServer(app);
+server.listen(port);
+server.on('listening', () => console.log('listening on port ' + port));
