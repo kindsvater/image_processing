@@ -12,5 +12,6 @@ PropConvert.lightnessToASCII = (lightness) => {
 }
 
 PropConvert.lightnessToGrayscale = (lightness) => {
-    return rgba(100, 100, 100, 255);
+    grayValue = 255 * lightness / 100; //probably not a linear function but let's give it a go.
+    return rgba(grayValue, grayValue, grayValue);
 }

@@ -1,6 +1,6 @@
 const { rgba, redLevel, greenLevel, blueLevel } = require("./../rgba.js");
-const { lightnessToASCII } = require("./../PropConvert.js");
-const { luminence, perceivedLightness } = require("./../srgb.js");
+const { lightnessToASCII, lightnessToGrayscale } = require("./../PropConvert.js");
+const { luminence, CIEPerceivedLightness } = require("./../srgb.js");
 
 function imgToRGBA(rawImgData) {
     //check if raw stream is an array and if it is divisible by 4
@@ -40,13 +40,25 @@ module.exports = {
             return luminence(redLevel(color), greenLevel(color), blueLevel(color));
         });
         let lightnessVector = luminenceVector.map( Y => {
-                let m = perceivedLightness(Y);
-            return m;
+            return CIEPerceivedLightness(Y);
         });
         let ASCIIVector = lightnessVector.map( light => {
             return lightnessToASCII(light);
         });
         let textImage = ASCIIVectorToImage(ASCIIVector, imageWidth, padding);
         return textImage;
+    },
+    "rawImgtoGrayscale" : (rawImgData) => {
+        let RGBAImg = imgToRGBA(rawImgData);
+        let luminenceVector = RGBAImg.map( color => {
+            return luminence(redLevel(color), greenLevel(color), blueLevel(color));
+        });
+        let lightnessVector = luminenceVector.map( Y => {
+            return CIEPerceivedLightness(Y);
+        });
+        let grayImg = lightnessVector.map( L => {
+            return lightnessToGrayscale(L);       
+        });
+        return grayImg;
     }
 }
