@@ -164,7 +164,7 @@ function writeChannelTreeToFile(L, chanOrder) {
     });
     
     readInterface.on('close', function() {
-        let filename = './cieplTree/' + L
+        let filename = './cieplTree/ct' + L
         let f = fs.createWriteStream(filename, {flags: 'a'});
         let pVals = Object.keys(chanTree);
         f.write(Math.min(...pVals) + ',' + pVals.length);
@@ -192,10 +192,12 @@ function writeChannelTreeToFile(L, chanOrder) {
         // console.log("finished writing channel tree to " + filename);
     })
 }
-
-writeChannelTreeToFile(77, [1, 0, 2]);
-
-function readChannelTreeFromFile(L) {
-    let chanTree = null;
-    let f = readSync
+for (let i = 80; i < 101; i++) {
+    writeChannelTreeToFile(i, [1, 0, 2]);
 }
+
+
+// function readChannelTreeFromFile(L) {
+//     let chanTree = null;
+//     let f = readSync
+// }
