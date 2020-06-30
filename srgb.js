@@ -45,7 +45,7 @@ function isSRGBValue(channelValue) {
 }
 
 //If sRGB can represent 255 x 255 x 255 = 16,777,216 colors, how many discrete luminosity values are in this color space?
-function countUniqueLuminenceValues() {
+function getColorsOfSameBrightness() {
     let YtoRGBMap = [];
     for (let r = 0; r < 256; r++) {
         for (let g = 0; g < 256; g++) {
@@ -70,6 +70,6 @@ function compareBrightnessFunctions(r, g, b) {
     console.log(srgb.CCIR601Luma(r, g, b));
     console.log(srgb.BT709Luma(r, g, b));
 }
+
 //compareBrightnessFunctions(77, 77, 77);
-countUniqueLuminenceValues();
     
