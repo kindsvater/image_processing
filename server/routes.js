@@ -22,6 +22,23 @@ module.exports = function(app) {
             res.send(grayVector);
         }
     );
+    app.post('/randimg',
+    bodyParser.urlencoded({limit: '50mb', extended: true}),
+    (req, res) => {
+        let imageData = req.body.imageData.split(',');
+        let randImg = imgController.rawImgtoRand(imageData);
+        let randVector = randImg.flat();
+        res.send(randVector);
+    });
+    app.post('/rand',
+    bodyParser.urlencoded({extended: true}),
+    (req, res) => {
+        let pixelCount = req.body.pixels;
+        let light = req.body.light;
+        let colors = imgController.genXColorsOfLight(pixelCount, light);
+        let colorVector = colors.flat();
+        res.send(colorVector);
+    });
     app.all("*", (req, res, next) => {
         res.sendFile(path.resolve("public/index.html"));
     });

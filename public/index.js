@@ -16,18 +16,27 @@ img.onload = function() {
 
     console.log("data size " + rawImgData.length);
     
-    convertImagetoASCII(rawImgData, cwidth, (textImage) => {
-        document.getElementById('result').innerHTML = textImage;
-    });
+    // convertImagetoASCII(rawImgData, cwidth, (textImage) => {
+    //     document.getElementById('result').innerHTML = textImage;
+    // });
 
-    convertImagetoGrayscale(rawImgData, cwidth, (gsImageData) => {
-        contextData.data.set(gsImageData);
+    // convertImagetoGrayscale(rawImgData, cwidth, (gsImageData) => {
+    //     contextData.data.set(gsImageData);
+    //     context.putImageData(contextData, 0, 0); 
+    // });
+    let pixelCount = rawImgData.length / 4;
+    // getRandomColorsOfLight(90000, 77, (randImageData) => {
+    //     contextData.data.set(randImageData);
+    //     context.putImageData(randImageData, 0, 0);
+    // });
+    convertImagetoRand(rawImgData, cwidth, (rImageData) => {
+        console.log(rImageData);
+        contextData.data.set(rImageData);
         context.putImageData(contextData, 0, 0); 
-    });
-
+    })
     
 }
-img.src = 'me.jpg';
+img.src = 'puppy.jpg';
 
 
 
@@ -52,9 +61,38 @@ function convertImagetoGrayscale(rawImgData, imageWidth, next) {
     http.onreadystatechange = function() {
         if (http.readyState == 4 && http.status == 200) {
             let unclampedData = http.responseText.slice(1, http.responseText.length - 1).split(",");
+            let gsImgData = new ImageData(new Uint8ClampedArray(unclampedData), imageWidth);
+            next(gsImgData);
+        }
+    }
+    http.send('imageWidth=' + imageWidth + '&' + 'imageData=' + rawImgData);
+}
+
+function convertImagetoRand(rawImgData, imageWidth, next) {
+    let http = new XMLHttpRequest();
+    let url = "/randimg";
+    http.open('POST', url, true);
+    http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+    http.onreadystatechange = function() {
+        if (http.readyState == 4 && http.status == 200) {
+            let unclampedData = http.responseText.slice(1, http.responseText.length - 1).split(",");
             let gsImgData = new Uint8ClampedArray(unclampedData);
             next(gsImgData);
         }
     }
     http.send('imageWidth=' + imageWidth + '&' + 'imageData=' + rawImgData);
+}
+function getRandomColorsOfLight(x, L, next) {
+    let http = new XMLHttpRequest();
+    let url = "/rand";
+    http.open('POST', url, true);
+    http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+    http.onreadystatechange = function() {
+        if (http.readyState == 4 && http.status == 200) {
+            let unclampedData = http.responseText.slice(1, http.responseText.length - 1).split(",");
+            let randImgData = new ImageData( new Uint8ClampedArray(unclampedData), 300);
+            next(randImgData);
+        }
+    }
+    http.send('pixels=' + x + '&' + 'light=' + L);
 }
