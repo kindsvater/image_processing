@@ -26,10 +26,10 @@ function writeBrightnessFiles(minR, maxR) {
         for (let g = 0; g < 256; g++) {
             for (let b = 0; b < 256; b++) {
                 let Y = luminence(r, g, b);
-                let L = Math.round(CIEPerceivedLightness(Y));
-                
+                //let L = Math.round(CIEPerceivedLightness(Y));
+                let L = Math.round(255 * (CIEPerceivedLightness(Y) / 100));
                 if(!streams[L]) {
-                    let file = fs.createWriteStream('./ciepl/cie' + L, {flags:'a'});
+                    let file = fs.createWriteStream('./pl255/cie' + L, {flags:'a'});
                     file.on('error', function(err) {
                         console.log(err);
                     });

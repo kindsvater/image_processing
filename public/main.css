@@ -3,4 +3,11 @@
     font-size: 3px;
     color: aquamarine;
     background-color: black;
+   
+}
+#manip {
+    width: 100%;
+}
+body {
+    margin: 0;
 }
