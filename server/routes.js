@@ -55,8 +55,22 @@ module.exports = function(app) {
         let randVector = randImg.flat();
         res.send(randVector);
     });
+    app.post('/light',
+    bodyParser.urlencoded({limit: '50mb', extended: true}),
+    (req, res) => {
+        let imageData = req.body.imageData.split(',');
+        let lightness = imgController.imgtoLight(imageData, true);
+        res.send(lightness);
+    });
+    app.post('/randlgrad',
+    bodyParser.urlencoded({limit: '50mb', extended: true}),
+    (req, res) => {
+        let start = req.body.start;
+        let end = req.body.end;
+        let grad = imgController.randLGrad(start, end);
+        res.send(grad.flat());
+    });
     app.all("*", (req, res, next) => {
         res.sendFile(path.resolve("public/index.html"));
     });
-
 }

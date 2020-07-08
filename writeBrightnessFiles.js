@@ -1,8 +1,8 @@
 const fs = require('fs');
-const path = require('path');
 const readline = require('readline');
-const { CIEPerceivedLightness, luminence } = require('./srgb');
-const {randPHistInt, rhSquaredProbHist, randInt} = require('./randGen.js');
+const { decodeGamma8Bit } = require('./srgb.js');
+const { relativeLuminence, lightness, normalRLuminence } = require('./cie.js');
+const { randPHistInt, rhSquaredProbHist, randInt } = require('./randGen.js');
 
 function hasUniformValues(arr) {
     if (!Array.isArray(arr)) {
@@ -19,17 +19,19 @@ function hasUniformValues(arr) {
     return true;
 }
 
-function writeBrightnessFiles(minR, maxR) {
+function writeBrightnessFiles(minR, maxR, filepath) {
     //Do chunks of 50 at a time to prevent Node from crashing
     for (let r = minR; r < maxR; r++) {
         let streams = [];
         for (let g = 0; g < 256; g++) {
             for (let b = 0; b < 256; b++) {
-                let Y = luminence(r, g, b);
-                //let L = Math.round(CIEPerceivedLightness(Y));
-                let L = Math.round(255 * (CIEPerceivedLightness(Y) / 100));
+                let Y = relativeLuminence(decodeGamma8Bit(r),decodeGamma8Bit(g),decodeGamma8Bit(b));
+                let Ynorm = normalRLuminence(Y);
+                //let L = Math.round(lightness(Ynorm));
+
+                let L = Math.round(255 * (lightness(Ynorm) / 100));
                 if(!streams[L]) {
-                    let file = fs.createWriteStream('./pl255/cie' + L, {flags:'a'});
+                    let file = fs.createWriteStream(filepath + L, {flags:'a'});
                     file.on('error', function(err) {
                         console.log(err);
                     });
@@ -233,10 +235,10 @@ function writeChannelTreeToFile(L, chanOrder) {
 }
 //Given a csv file of sRGB color data and color channel priority list, compresses colors into a file representable as a tree of height three.
 // Each tier contains values of the corresponding color channel. 
-function writeChannelTreeToBuffer(L, chanOrder) {
+function writeChannelTreeToBuffer(L, chanOrder, inputPath, outputPath) {
     let chanTree = {}
     let readInterface = readline.createInterface({
-        input: fs.createReadStream('./ciepl/cie' + L),
+        input: fs.createReadStream(inputPath + L),
         console: false
     });
     let nodeCount = {
@@ -334,7 +336,7 @@ function writeChannelTreeToBuffer(L, chanOrder) {
             });
         });
 
-        let filename = './cieTreeBuff/ct' + L
+        let filename = outputPath + L
         fs.writeFile(filename, view, function(err, result) {
             if (err) console.log('error: ', err);
         });
@@ -407,10 +409,10 @@ function loadChanTreeFile(filepath) {
    return buffer;
 }
 
-//writeBrightnessFiles(200, 256);
+//writeBrightnessFiles(0, 50, './pl255/cie');
 
-// for (let i = 0; i < 101; i++) {
-//     writeChannelTreeToBuffer(i, [1, 0, 2]);
+// for (let i = 201; i < 256; i++) {
+//     writeChannelTreeToBuffer(i, [1, 0, 2], './pl255/cie', './255buff/ct');
 // }
 
 // let filename = './cieTreeBuff/ct' + 0
