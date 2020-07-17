@@ -2,7 +2,7 @@ const { is8BitInt, inUnitInterval } = require('./valuetype.js');
 
 //Linearizes sRGB gamma-encoded color channel value in unit interval by applying
 // sRGGB gamma decoding step-function. Value returned is in unit interval. 
-function decodeGammaUI(stimulus) {
+function decodeGammaFromUI(stimulus) {
     if (stimulus < 0.04045) {
         return stimulus / 12.92;
     } else {
@@ -12,12 +12,12 @@ function decodeGammaUI(stimulus) {
 
 //Linearizes sRGB gamma-encoded  8bit color channel value by applying
 // sRGB gamma decoding step function. Value returned is in unit interval.
-function decodeGamma8Bit(colorChannel) {
+function decodeGammaFrom8Bit(colorChannel) {
     let uiCC = colorChannel / 255;
     return decodeGammaUI(uiCC);
 }
 
-//From linear stimulus in unit Interval applies sRGB piece function gamma encoding.
+//From linear stimulus in unit Interval applies sRGB piecewise gamma encoding function .
 // Returned value is in Unit Interval.
 function encodeGammaUI(linStim) {
     if (linStim < 0.00313080495) {
@@ -27,7 +27,7 @@ function encodeGammaUI(linStim) {
     }
 }
 
-//From linear stimulus in unit interval applies sRGB piece function gamma encoding.
+//From linear stimulus in unit interval applies sRGB piecewise gamma encoding function .
 // Returned value is 8Bit Integer.
 function encodeGamma8Bit(linStim) {
     let uiCC = encodeGammaUI(linStim);
@@ -57,7 +57,16 @@ const primaryChromaticityCoordinates = {
             y : 0.06,
             z : 0.79
         }
+    }
+}
 
+//Chromaticity Coordinates of sRGB reference white (CIE Illuminant D65) in linear 3D space.
+const whitepointChroma = {
+    matrix : [0.3127, 0.3290, 0.3583],
+    obj : {
+        x : 0.3127,
+        y : 0.3290,
+        z : 0.3583
     }
 }
 //Not a proper luma conversion for sRGB, 
@@ -77,6 +86,8 @@ const primaryChromaticityCoordinates = {
 
 
 module.exports = {
-    'decodeGammaUI': decodeGammaUI,
-    'decodeGamma8Bit': decodeGamma8Bit,
+    'decodeGammaUI': decodeGammaFromUI,
+    'decodeGamma8Bit': decodeGammaFrom8Bit,
+    'encodeGammaUI' : encodeGammaUI,
+    'encodeGamma8Bit' : encodeGamma8Bit
 }
