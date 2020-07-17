@@ -6,7 +6,7 @@ function CIEXYZ(X, Y, Z) {
 }
 //CIE Standard Illuminant (Daylight). This is the standard white point of the
 //CIEXYZ color space. 
-const D65 = CIEXYZ(95.047, 100.00, 108.883);
+const D65 = CIEXYZ(0.9505, 1.0000, 1.0890);
 const Yn = D65[1];
 
 //Given RGB tristimulus values in the unit interval, returns luminance 
