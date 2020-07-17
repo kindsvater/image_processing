@@ -5,8 +5,9 @@ const { is8BitInt, inUnitInterval } = require('./valuetype.js');
 function decodeGammaUI(stimulus) {
     if (stimulus < 0.04045) {
         return stimulus / 12.92;
+    } else {
+        return Math.pow(((stimulus + 0.055) / 1.055), 2.4);
     }
-    return Math.pow(((stimulus + 0.055) / 1.055), 2.4);
 }
 
 //Linearizes sRGB gamma-encoded  8bit color channel value by applying
@@ -16,6 +17,49 @@ function decodeGamma8Bit(colorChannel) {
     return decodeGammaUI(uiCC);
 }
 
+//From linear stimulus in unit Interval applies sRGB piece function gamma encoding.
+// Returned value is in Unit Interval.
+function encodeGammaUI(linStim) {
+    if (linStim < 0.00313080495) {
+        return linStim * 12.92;
+    } else {
+        return Math.pow(linStim, 1 / 2.4) * 1.055 - 0.055;
+    }
+}
+
+//From linear stimulus in unit interval applies sRGB piece function gamma encoding.
+// Returned value is 8Bit Integer.
+function encodeGamma8Bit(linStim) {
+    let uiCC = encodeGammaUI(linStim);
+    return Math.round(uiCC * 255); 
+}
+
+//Coordinates of sRGB RGB primaries in linearized 3D space. 
+const primaryChromaticityCoordinates = {
+    matrix : [
+        [0.64, 0.33, 0.03],
+        [0.30, 0.60, 0.10],
+        [0.15, 0.06, 0.79]
+    ],
+    obj : {
+        r : {
+            x : 0.64,
+            y : 0.33,
+            z : 0.03
+        },
+        g : {
+            x : 0.30,
+            y : 0.60,
+            z : 0.10
+        },
+        b : {
+            x : 0.15,
+            y : 0.06,
+            z : 0.79
+        }
+
+    }
+}
 //Not a proper luma conversion for sRGB, 
 //relies on primaries and white point in NTSC color spaces like YIQ an YUV
 // function lumaCCIR601(rPrime, gPrime, bPrime) {
@@ -29,6 +73,8 @@ function decodeGamma8Bit(colorChannel) {
 //     let luma = 0.2126 * rPrime + 0.7152 * gPrime + 0.0722 * bPrime;
 //     return luma;
 // }
+
+
 
 module.exports = {
     'decodeGammaUI': decodeGammaUI,

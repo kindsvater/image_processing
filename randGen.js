@@ -36,6 +36,10 @@ function robinHoodSquaredProbHistogram(p) {
     return {'K': K, 'V': V}
 }
 
+//Generates a random index from a probability histogram. 
+//A probability histogram is represented by the arrays K and V
+//First generates a random float from 0 through 1. 
+//stored in arr
 function randProbHistogramInt(K, V) {
     //check that K and V are arrays of the same length
     let n = K.length;
@@ -47,6 +51,7 @@ function randProbHistogramInt(K, V) {
     return K[j];
 }
 
+//Returns an integer >= min and < min + range
 function randInt(min, range) {
     return Math.floor(Math.random() * range) + min;
 }

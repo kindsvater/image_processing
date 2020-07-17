@@ -70,7 +70,7 @@ module.exports = function(app) {
         let grad = imgController.randLGrad(start, end);
         res.send(grad.flat());
     });
-    app.all("*", (req, res, next) => {
+    app.all('*', (req, res, next) => {
         res.sendFile(path.resolve("public/index.html"));
     });
 }
