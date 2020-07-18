@@ -1,28 +1,62 @@
-//Calculates and returns the inverse of a square matrix. If matrix is not valid or not square, returns null.
+//Calculates and returns the inverse of a square matrix. If matrix is not valid or not square, returns false.
 function invert(square) {
     let sDim = dim(square);
     if (!(sDim && sDim.rows === sDim.cols)) {
-        return null;
+        throw new err("Given Matrix must be square.")
     } 
-    let det = determinant(square);
-    if (det === 0) {
-        return false;
+    
+    let I = [];
+    let C = [];
+    for(let i = 0; i < sDim.rows; i++) {
+        I.push([]);
+        C.push([]);
+        for (let m = 0; m < sDim.rows; m++) {
+            I[i][m] = i === m ? 1 : 0;
+            C[i][m] = square[i][m];
+        }
     }
-    let size = sDim.rows;
-    let i = [];
-    for (let x = 0; x < size; x++) {
-        i.push([]);
-    }
-    for (let r = 0; r < size; r++) {
-        for (let c = 0; c < size; c++) {
-            if (r === c) {
-                i[size - r - 1][size - c - 1] = square[r][c] / det;
-            } else {
-                i[r][c] = square[r][c] * -1 / det;
+
+    let diag;
+    for (let r = 0; r < sDim.rows; r++) {
+        diag = C[r][r];
+        if (diag === 0) {
+            for (let s = r + 1; s < sDim.rows; s++) {
+                console.log(C)
+                console.log(s + " " + r)
+                if (C[s][r] !== 0) {
+                    let temp = C[r];
+                    C[r] = C[s];
+                    C[s] = temp;
+                    temp = I[r];
+                    I[r] = I[s];
+                    I[s] = temp;
+                }
+            }
+            diag = C[r][r];
+            if (diag === 0) {
+                return false;
+            }
+        }
+
+        for (let i = 0; i < sDim.rows; i++) {
+            C[r][i] = C[r][i] / diag;
+            I[r][i] = I[r][i] / diag;
+        }
+        for (let g = 0; g < sDim.rows; g++) {
+            if (g === r) {
+                continue;
+            }
+
+            let h = C[g][r];
+
+            for (let j = 0; j < sDim.rows; j++) {
+                C[g][j] -= h * C[r][j];
+                I[g][j] -= h * I[r][j];
             }
         }
     }
-    return i;
+
+    return I;
 }
 
 //Returns the rows and columns of given matrix. If matrix is not valid, returns null.
@@ -49,6 +83,7 @@ function dim(matrix) {
     return null;
 }
 
+
 function determinant(matrix) {
     let dimM = dim(matrix);
     if (dimM && dimM.rows !== dimM.cols) {
@@ -60,7 +95,7 @@ function determinant(matrix) {
         det = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0];
     } else {
         det = 0;
-        let even = true;
+        let even = false;
         for(let c = 0; c < dimM.rows; c++) {
             let scalar = matrix[0][c];
             let subMatrix = [];
@@ -80,6 +115,7 @@ function determinant(matrix) {
             } else {
                 det += scalar * subDet;
             }
+            console.log(subDet)
             even = !even;
         }
     }
@@ -110,7 +146,7 @@ function multiply(A, B) {
             ") and the row count of B (" + dimB.rows + ") must match."
         );
     }
-    if (dimA.rows = 1)
+
     let C = []; 
     //Set up C to be a dimA.rows x dimB.cols matrix
     for (let s = 0; s < dimA.rows; s++) {
@@ -137,4 +173,5 @@ function multiply(A, B) {
 module.exports = {
     dim,
     invert,
+    multiply
 }
