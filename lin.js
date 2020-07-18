@@ -21,8 +21,6 @@ function invert(square) {
         diag = C[r][r];
         if (diag === 0) {
             for (let s = r + 1; s < sDim.rows; s++) {
-                console.log(C)
-                console.log(s + " " + r)
                 if (C[s][r] !== 0) {
                     let temp = C[r];
                     C[r] = C[s];
@@ -115,7 +113,6 @@ function determinant(matrix) {
             } else {
                 det += scalar * subDet;
             }
-            console.log(subDet)
             even = !even;
         }
     }
@@ -124,8 +121,8 @@ function determinant(matrix) {
 
 //Given two vectors of length n, returns the dot-product of their entries
 function dot(A, B) {
-    if (A && B && A.length > 0 && A.length === B.length) {
-        return null;
+    if (!(A && B) || A.length === 0 || A.length !== B.length) {
+        throw new Error("Vectors A and B must be Arrays of the same length.");
     }
     let product = 0;
     for (let i = 0; i < A.length; i++) {
@@ -149,22 +146,28 @@ function multiply(A, B) {
 
     let C = []; 
     //Set up C to be a dimA.rows x dimB.cols matrix
-    for (let s = 0; s < dimA.rows; s++) {
-        C.push([]);
+    //only perform if product is not a vector
+    if (dimB.cols > 1) {
+        for (let s = 0; s < dimA.rows; s++) {
+            C.push([]);
+        }
     }
 
     for (let i = 0; i < dimA.rows; i++) {
         for (let j = 0; j < dimB.cols; j++) {
             let sum = 0;
             for (let k = 0; k < dimA.cols; k++) {
-                console.log(i + " " + k + " " + j);
                 let av, bv;
                 av = dimA.cols === 1 ? A[i] : A[i][k];
                 bv = dimB.cols === 1 ? B[k] : B[k][j];
                 
                 sum = sum + av * bv;
             }
-            C[i][j] = sum;
+            if (dimB.cols > 1) {
+                C[i][j] = sum;
+            } else {
+                C[i] = sum;
+            }          
         }
     }
     return C;

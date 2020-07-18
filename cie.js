@@ -1,4 +1,4 @@
-
+const 
 
 //Device Invariant Representation of Color
 function CIEXYZ(X, Y, Z) { 

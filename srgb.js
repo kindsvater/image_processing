@@ -1,5 +1,5 @@
 const { is8BitInt, inUnitInterval } = require('./valuetype.js');
-
+const { multiply } = require('./lin.js');
 //Linearizes sRGB gamma-encoded color channel value in unit interval by applying
 // sRGGB gamma decoding step-function. Value returned is in unit interval. 
 function decodeGammaFromUI(stimulus) {
@@ -34,6 +34,21 @@ function encodeGamma8Bit(linStim) {
     return Math.round(uiCC * 255); 
 }
 
+//Converts sRGB color to XYZ colorspace.
+function sRGBtoXYZ(rgb) {
+    let linRGB = linearize8Bit(rgb);
+    return multiply(sRGBtoXYZMatrix, linRGB);
+}
+
+function linearize8Bit(rgb) {
+    return rgb.map(cc => decodeGammaFrom8Bit(cc));
+}
+
+const sRGBtoXYZMatrix = [
+    [0.41239079926595923, 0.35758433938387785, 0.1804807884018343],
+    [0.21263900587151022, 0.7151686787677557, 0.07219231536073371],
+    [0.019330818715591835,0.11919477979462596, 0.9505321522496606]
+]
 //Coordinates of sRGB RGB primaries in linearized 3D space. 
 const primaryChromaticityCoordinates = {
     matrix : [
@@ -89,5 +104,7 @@ module.exports = {
     'decodeGammaUI': decodeGammaFromUI,
     'decodeGamma8Bit': decodeGammaFrom8Bit,
     'encodeGammaUI' : encodeGammaUI,
-    'encodeGamma8Bit' : encodeGamma8Bit
+    'encodeGamma8Bit' : encodeGamma8Bit,
+    'primaryChroma' : primaryChromaticityCoordinates.matrix,
+    'whitepointChroma' : whitepointChroma.matrix
 }
