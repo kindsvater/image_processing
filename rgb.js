@@ -1,12 +1,27 @@
 
-const { dim, invert } = require('./lin.js');
+const { invert, dot } = require('./lin.js');
+
+const redLevel = (rgbColor) => rgbColor[0];
+const greenLevel = (rgbColor) => rgbColor[1];
+const blueLevel = (rgbColor) => rgbColor[2];
 
 let rgb = module.exports
-rgb.rgba = (r, g, b, a) => [r, g, b, a ? a : 255];
-rgb.rgb = (r, g, b) => [r, g, b];
-rgb.redLevel = (rgbColor) => rgbColor[0];
-rgb.greenLevel = (rgbColor) => rgbColor[1];
-rgb.blueLevel = (rgbColor) => rgbColor[2];
+
+rgb.rgba = {
+    "color" : (r, g, b, a) => [r, g, b, a ? a : 255],
+    redLevel,
+    greenLevel,
+    blueLevel,
+    "alphaLevel" : (rgbaColor) => rgbaColor[3]
+} 
+
+rgb.rgb = {
+    color : (r, g, b) => [r, g, b],
+    redLevel,
+    greenLevel,
+    blueLevel
+} 
+
 rgb.averageChannelLevel = (rgbColor) => (rgbColor[0] + rgbColor[1] + rgbColor[2]) / 3;
 rgb.XYZconversionMatrix = (primaryCoords, XYZWhite) => {
     let primXYZ = [
@@ -25,3 +40,6 @@ function rgbWhiteToXYZ(whiteCoords) {
     whiteY = greenLevel(whiteCoords);
     return whiteCoords.map( cc => cc / whiteY);
 }
+
+rgb.createRGBRelativeLuminance = (XYZconversionMatrix) =>
+    rgb => dot([redLevel(rgb), greenLevel(rgb), blueLevel(rgb)], XYZconversionMatrix[1]);

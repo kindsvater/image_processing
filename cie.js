@@ -2,13 +2,12 @@ const { inNormalUI } =  require('./valuetype.js');
 
 //Device Invariant Representation of Color. The tristimulus values X, Y, and Z technically
 // range from 0.0000 to infinity, but never exceed 1.2000 in practice. 
-//One stimuli represents the intensity of the color
+//One stimulus represents the intensity of the color
 //Y : the relative luminance of the color (how bright it seems compared to the environment);
-//The remaining two stimuli represent the chromaticity or quality of the color 
+//The remaining two stimuluses represent the chromaticity or quality of the color 
 //X : Mix of LMS cone response curves. Chosen to be non-negative
 //Z : Approximation of the short cone response in the human eye.
 function XYZ(X, Y, Z) { 
-    //TODO: check type and range of inputs;
     if (X < 0 || X > 1.1) {
         throw new Error("X stimulus value out of range.");
     }
@@ -26,7 +25,7 @@ const zStim = xyz => xyz[2];
 
 //The CIE LAB color space is a device invariant representation of color that is designed to be
 // perceptually uniform - there is a linear relationship between the apparent difference and the
-// numerical differance between two colors. 
+// numerical differance of two colors. 
 //L : 0 <= L <= 100. Pereceived lightness of the color (0=Black 100=Lightest White**)
     //** Lightest White is relative to an illuminant.
 //a and b represent the chromaticity of the color.
@@ -73,7 +72,8 @@ function normalRLuminence(Y) {
     return Y * 100;
 }
 
-//Transforms given XYZ stimuli to its perceptually uniform value relative to the reference white stimuli. 
+//Transforms single XYZ stimulus to its perceptually uniform value. This value is relative to corresponding
+//stimulus of the referent white. 
 function uniformPerception(XYZStim, whiteStim) {
     let r = XYZStim / whiteStim;
     if ( r > (216 / 24389) ) {

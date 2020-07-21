@@ -56,7 +56,7 @@ function randInt(min, range) {
     return Math.floor(Math.random() * range) + min;
 }
 
-
+// function gauss
 module.exports.rhSquaredProbHist = robinHoodSquaredProbHistogram;
 module.exports.randPHistInt = randProbHistogramInt;
 module.exports.randInt = randInt;

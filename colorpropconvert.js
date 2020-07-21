@@ -1,4 +1,4 @@
-const {rgba, redLevel, greenLevel, blueLevel} = require('./rgba.js');
+const { rgba } = require('./rgb.js');
 const PropConvert = module.exports;
 
 PropConvert.lightnessToASCII = (lightness) => {
@@ -23,10 +23,10 @@ PropConvert.rgbaGradient = (start, end, step) => {
         let intenseEnd = i;
         let intenseStrt = step - i;
 
-        let color = rgba(
-            Math.round((intenseStrt * redLevel(start) + intenseEnd * redLevel(end)) / step),
-            Math.round((intenseStrt * greenLevel(start) + intenseEnd * greenLevel(end)) / step),
-            Math.round((intenseStrt * blueLevel(start) + intenseEnd * blueLevel(end)) / step)
+        let color = rgba.color(
+            Math.round((intenseStrt * rgba.redLevel(start) + intenseEnd * rgba.redLevel(end)) / step),
+            Math.round((intenseStrt * rgba.greenLevel(start) + intenseEnd * rgba.greenLevel(end)) / step),
+            Math.round((intenseStrt * rgba.blueLevel(start) + intenseEnd * rgba.blueLevel(end)) / step)
         );
 
         grad.push(color);

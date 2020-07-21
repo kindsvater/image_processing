@@ -1,7 +1,7 @@
-const { rgba, redLevel, greenLevel, blueLevel } = require("./../rgba.js");
-const { decodeGamma8Bit } = require('../srgb.js');
+const { rgba } = require("./../rgb.js");
+const { decodeGamma8Bit, relativeLuminence, linearize8Bit } = require('../srgb.js');
 const { lightnessToASCII, lightnessToGrayscale, rgbaGradient } = require("../colorpropconvert.js");
-const { relativeLuminence, lightness, normalRLuminence } = require("./../cie.js");
+const { lightness, normalRLuminence } = require("./../cie.js");
 const { loadChanTreeFile, randomColorFromChanTreeBuff } = require("./../writeBrightnessFiles.js");
 const treeBuffPath = '255buff/ct' //'cieBuff/ct'
 
@@ -12,7 +12,7 @@ function imgToRGBA(rawImgData) {
     for (let i = 1; i <= rawImgData.length; i ++) {
         colorChannels.push(rawImgData[i - 1]);
         if (i % 4 === 0) {
-            colorList.push(rgba.apply(null, colorChannels));
+            colorList.push(rgba.color.apply(null, colorChannels));
             colorChannels = [];
         }
     }
@@ -38,17 +38,13 @@ function ASCIIVectorToImage(ASCIIVector, imageWidth, xPadding=1) {
 function imgtoLight(rawImgData, discrete=false) {
     let RGBAImg = imgToRGBA(rawImgData);
     let relativeLuminenceVector = RGBAImg.map( 
-        color => normalRLuminence(
-            relativeLuminence(
-                decodeGamma8Bit(redLevel(color)),
-                decodeGamma8Bit(greenLevel(color)),
-                decodeGamma8Bit(blueLevel(color))
-            )
-        )
+        color => relativeLuminence(linearize8Bit(color))
     );
+
     let lightnessVector = relativeLuminenceVector.map( 
         Y => discrete ? Math.round(255 * (lightness(Y) / 100)) : lightness(Y)
     );
+    console.log(relativeLuminenceVector);
     return lightnessVector;
 }
 
@@ -92,7 +88,7 @@ module.exports = {
                 buff = cachedBuffers[L];
             }
             let color = randomColorFromChanTreeBuff(buff, [1,0,2]);
-            return rgba(color[0], color[1], color[2]);
+            return rgba.color(color[0], color[1], color[2]);
         });
         return randImg;
     },
@@ -110,7 +106,7 @@ module.exports = {
                 colorCache[L] = color;
             }
 
-            return rgba(color[0], color[1], color[2]);
+            return rgba.color(color[0], color[1], color[2]);
         });
         return randImg;
     },
@@ -123,7 +119,7 @@ module.exports = {
             let filename = treeBuffPath + i;
             let buff = loadChanTreeFile(filename);
             color = randomColorFromChanTreeBuff(buff, [1,0,2]);
-            lightGrad[i] = rgba(color[0], color[1], color[2]);
+            lightGrad[i] = rgba.color(color[0], color[1], color[2]);
         }
         for (let i = 0; i < 100; i += 10) {
             let gradient = rgbaGradient(lightGrad[i], lightGrad[i + 10], 11);
@@ -148,7 +144,7 @@ module.exports = {
                     console.log("!!! " + r)
                 }
             }
-            colors.push(rgba(r[0], r[1], r[2]));
+            colors.push(rgba.color(r[0], r[1], r[2]));
         }
         return colors;
     }

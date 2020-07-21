@@ -176,5 +176,6 @@ function multiply(A, B) {
 module.exports = {
     dim,
     invert,
-    multiply
+    multiply,
+    dot
 }
