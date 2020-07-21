@@ -11,7 +11,12 @@ function inUnitInterval(value) {
     && value <= 1.0)
 }
 
+function inNormalUI(value) {
+    return value >= 0 && value <= 100;
+}
+
 module.exports = {
-    'is8BitInt': is8BitInt,
-    'inUnitInterval': inUnitInterval
+    is8BitInt,
+    inUnitInterval,
+    inNormalUI
 }

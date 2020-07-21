@@ -22,6 +22,6 @@ rgb.XYZconversionMatrix = (primaryCoords, XYZWhite) => {
 }
 
 function rgbWhiteToXYZ(whiteCoords) {
-    whiteY = whiteCoords[1];
-    return whiteCoords.map( cc => cc / whiteCoords[1]);
+    whiteY = greenLevel(whiteCoords);
+    return whiteCoords.map( cc => cc / whiteY);
 }

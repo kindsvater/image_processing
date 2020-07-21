@@ -98,8 +98,6 @@ const whitepointChroma = {
 //     return luma;
 // }
 
-
-
 module.exports = {
     'decodeGammaUI': decodeGammaFromUI,
     'decodeGamma8Bit': decodeGammaFrom8Bit,
