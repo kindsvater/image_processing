@@ -55,7 +55,12 @@ img.onload = function() {
                 rawImgData[m * 4 + 3]
             ]);
         }
-
+        // let hist = [];
+        // for (let i in lightIdxs) {
+        //     hist.push({name: i, value: lightIdxs[i].length / rawImgData.length})
+        // }
+        
+        //createHistogram('#old', hist, "steelblue", 500, 1200)
         console.log(lightIdxs)
         document.getElementById('stop').addEventListener('click', function() {
             if (animate) {
@@ -63,7 +68,7 @@ img.onload = function() {
                 console.log("stop");
                 setTimeout(function() {
                     console.log("stopping")
-                    reverseCanvas(original, context, cwidth, cheight);
+                    reverseCanvas(lightIdxs, context, cwidth, cheight);
                 },
                 gradientSize * timestep * 3);
             }
@@ -75,7 +80,12 @@ img.onload = function() {
                 animate = true;
             }     
         });
-    })   
+    });
+    getLightnessHistgram(rawImgData, cwidth, (hst) => {
+        console.log("histogram")
+        console.log(hst);
+        createHistogram('svg', hst, "steelblue", 500, 1200)
+    })  
 }
 img.src = 'img/glenmount.jpg';
 
@@ -183,6 +193,18 @@ function convertImgToRandBrightGradient(rawImgData, imageWidth, next) {
 function getLightnessValuesofImg(rawImgData, imageWidth, next) {
     filterImage('/light', rawImgData, imageWidth, next);
 }
+function getLightnessHistgram(rawImgData, imageWidth, next) {
+    let http = new XMLHttpRequest();
+    let url = "/lhist";
+    http.open('POST', url, true);
+    http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+    http.onreadystatechange = function() {
+        if (http.readyState == 4 && http.status == 200) {
+            next(JSON.parse(http.responseText));
+        }
+    }
+    http.send('imageWidth=' + imageWidth + '&' + 'imageData=' + rawImgData);
+}
 function getRandomLightGradient(Lstart, Lend, next) {
     let http = new XMLHttpRequest();
     let url = "/randlgrad";
@@ -212,3 +234,44 @@ function getRandomColorsOfLight(x, L, next) {
     http.send('pixels=' + x + '&' + 'light=' + L);
 }
 
+function createHistogram(selector, data, color, height, width) {
+    let svg = d3.select(selector);
+    let margin = ({top: 30, right: 0, bottom: 30, left: 40});
+    let yAxis = g => g
+    .attr("transform", `translate(${margin.left},0)`)
+    .call(d3.axisLeft(y).ticks(null, data.format))
+    .call(g => g.select(".domain").remove())
+    .call(g => g.append("text")
+        .attr("x", -margin.left)
+        .attr("y", 10)
+        .attr("fill", "currentColor")
+        .attr("text-anchor", "start")
+        .text(data.y))
+
+    let xAxis = g => g
+    .attr("transform", `translate(0,${height - margin.bottom})`)
+    .call(d3.axisBottom(x).tickFormat(i => data[i].name).tickSizeOuter(0))
+
+    let x = d3.scaleBand()
+    .domain(d3.range(data.length))
+    .range([margin.left, width - margin.right])
+    .padding(0.1)
+
+    let y = d3.scaleLinear()
+    .domain([0, d3.max(data, d => d.value)]).nice()
+    .range([height - margin.bottom, margin.top])
+
+    
+
+    svg.append('g').attr("fill", color)
+        .selectAll("rect")
+        .data(data)
+        .join("rect")
+            .attr("x", (d, i) => x(i))
+            .attr("y", d => y(d.value))
+            .attr("height", d => y(0) - y(d.value))
+            .attr("width", x.bandwidth());
+
+    svg.append("g").call(xAxis);
+    svg.append("g").call(yAxis);
+}

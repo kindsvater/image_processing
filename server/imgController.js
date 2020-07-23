@@ -1,8 +1,10 @@
 const { rgba } = require("./../rgb.js");
-const { decodeGamma8Bit, relativeLuminence, linearize8Bit } = require('../srgb.js');
+const { decodeGamma8Bit, relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('../srgb.js');
 const { lightnessToASCII, lightnessToGrayscale, rgbaGradient } = require("../colorpropconvert.js");
-const { lightness, normalRLuminence } = require("./../cie.js");
+const { lightness, XYZtoLAB, LABtoXYZ, illuminant } = require("./../cie.js");
 const { loadChanTreeFile, randomColorFromChanTreeBuff } = require("./../writeBrightnessFiles.js");
+const { histogram } = require("./../imgProcessing");
+const { ImageReader } = require("./../imgReader");
 const treeBuffPath = '255buff/ct' //'cieBuff/ct'
 
 function imgToRGBA(rawImgData) {
@@ -44,7 +46,6 @@ function imgtoLight(rawImgData, discrete=false) {
     let lightnessVector = relativeLuminenceVector.map( 
         Y => discrete ? Math.round(255 * (lightness(Y) / 100)) : lightness(Y)
     );
-    console.log(relativeLuminenceVector);
     return lightnessVector;
 }
 
@@ -134,6 +135,31 @@ module.exports = {
     },
     "imgtoLight" : imgtoLight,
     "randLGrad" : randLGrad,
+    "LHist" : (rawImgData) => {
+        let binCount = 100,
+            max = 100,
+            min = 0,
+            range = max - min,
+            binSize = range / binCount;
+
+        let hist = histogram(rawImgData, (rgbColor) => {
+            let Y = relativeLuminence(linearize8Bit(rgbColor));
+            return Math.round((lightness(Y) / 100) * (max - 1));
+        },
+        binCount,
+        min,
+        max,
+        true
+        )
+        let read = new ImageReader(rawImgData, true);
+        read.eachColor((color) => {
+            
+        })
+
+        return hist.map((p, i) => {
+            return {name: (i * binSize) + min, value : p}
+        });
+    },
     "genXColorsOfLight" : (x, L) => {
         let chanTreeBuffer = loadChanTreeFile(filename);
         let colors = []

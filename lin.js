@@ -61,7 +61,7 @@ function invert(square) {
 function dim(matrix) {
     if (Array.isArray(matrix) && matrix.length > 0) {
         let rows = matrix.length;
-        if (!matrix[0]) {
+        if (matrix[0] === undefined || matrix[0] === null) {
             return null;
         } else if (!Array.isArray(matrix[0])) {
             return { "rows": rows, "cols" : 1 }
@@ -135,7 +135,10 @@ function multiply(A, B) {
     let dimA = dim(A);
     let dimB = dim(B);
     if (!(dimA && dimB)) {
+        console.log(dimA);
+        console.log(dimB);
         throw new Error("A and B must be valid matrices.");
+
     }
     if (dimA.cols !== dimB.rows) {
         throw new Error(

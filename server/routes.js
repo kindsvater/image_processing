@@ -62,6 +62,13 @@ module.exports = function(app) {
         let lightness = imgController.imgtoLight(imageData, true);
         res.send(lightness);
     });
+    app.post('/lhist', 
+    bodyParser.urlencoded({limit: '50mb', extended: true}),
+    (req, res) => {
+        let imageData = req.body.imageData.split(',');
+        let hist = imgController.LHist(imageData);
+        res.json(hist);
+    });
     app.post('/randlgrad',
     bodyParser.urlencoded({limit: '50mb', extended: true}),
     (req, res) => {

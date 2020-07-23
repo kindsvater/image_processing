@@ -11,6 +11,12 @@ const sRGBtoXYZMatrix = [
     [0.019330818715591835,0.11919477979462596, 0.9505321522496606]
 ]
 
+const XYZtosRGBMatrix = [
+    [3.2404542, -1.5371385, -0.4985314],
+    [-0.9692660,  1.8760108,  0.0415560],
+    [0.0556434, -0.2040259,  1.0572252]
+]
+
 //Coordinates of sRGB red green and blue primary colors in linearized 3D space. 
 const primaryChromaticityCoordinates = {
     matrix : [
@@ -95,8 +101,14 @@ function linearize8Bit(rgb) {
     return rgb.map(cc => decodeGamma8Bit(cc));
 }
 
+function delinearize8Bit(rgb) {
+    return rgb.map(cc => encodeGamma8Bit(cc));
+}
 
-
+function XYZtosRGB(xyz) {
+    let linRGB = multiply(XYZtosRGBMatrix, xyz);
+    return delinearize8Bit(linRGB);
+}
 //Not a proper luma conversion for sRGB, 
 //relies on primaries and white point in NTSC color spaces like YIQ an YUV
 // function lumaCCIR601(rPrime, gPrime, bPrime) {
@@ -119,5 +131,7 @@ module.exports = {
     linearize8Bit,
     'primaryChroma' : primaryChromaticityCoordinates.matrix,
     'whitepointChroma' : whitepointChroma.matrix,
-    relativeLuminence
+    relativeLuminence,
+    sRGBtoXYZ,
+    XYZtosRGB
 }
