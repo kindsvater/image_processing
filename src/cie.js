@@ -1,4 +1,4 @@
-const { inNormalUI } =  require('./valuetype.js');
+const { inNormalUI, clampTo } =  require('./valuetype.js');
 
 //Device Invariant Representation of Color. The tristimulus values X, Y, and Z technically
 // range from 0.0000 to infinity, but never exceed 1.2000 in practice. 
@@ -7,18 +7,36 @@ const { inNormalUI } =  require('./valuetype.js');
 //The remaining two stimuluses represent the chromaticity or quality of the color 
 //X : Mix of LMS cone response curves. Chosen to be non-negative
 //Z : Approximation of the short cone response in the human eye.
+//Stores the coordinates of standard illuminants in XYZ Colorspace.
+const illuminant = {
+    'a' : [1.0985, 1.0000, 0.3558], //Tungsten Filament Lighting.
+    'c' : [0.9807, 1.0000, 1.1822], //Average Daylight.
+    'e' : [1.000, 1.000, 1.000], //Equal energy radiator
+    'D50' : [0.9642, 1.0000, 0.8249], // Horizon light at sunrise or sunset. ICC Standard Illuminant
+    'D55' : [0.9568, 1.0000, 0.9214], //Mid-morning or mid-afternoon daylight.
+    'D65' : [0.9505, 1.0000, 1.0890], //Daylight at Noon. 
+    'none' : [2.0, 2.0, 2.0]
+}
+
 const XYZ = {
-    color: (X, Y, Z) => { 
-        if (X < 0 || X > 1.1) {
-            throw new Error("X stimulus value out of range.");
+    color: (X, Y, Z, refWhite=illuminant.D65, clamp=false) => {
+        if (clamp) {
+            let cX = clampTo(X, 0, refWhite[0]),
+                cY = clampTo(Y, 0, refWhite[1]),
+                cZ = clampTo(Z, 0, refWhite[2]);
+            return [cX, cY, cZ];
+        } else {
+            if (X < 0 || X > refWhite[0]) {
+                throw new Error("X stimulus " + X + "out of range.");
+            }
+            if (Y < 0 || X > refWhite[1]) {
+                throw new Error("Y stimulus " + Y + "out of range.");
+            }
+            if (Z < 0 || Z > refWhite[2]) {
+                throw new Error("Z stimulus value " + Z + "out of range. ");
+            }
+            return [X, Y, Z];
         }
-        if (Y < 0 || X > 1.1) {
-            throw new Error("Y stimulus value out of range.");
-        }
-        if (Z < 0 || Z > 1.2) {
-            throw new Error("Z stimulus value out of range.");
-        }
-        return [X, Y, Z];
     },
     xStim : xyz => xyz[0],
     yStim : xyz => xyz[1],
@@ -38,14 +56,10 @@ const LAB = {
         if ( Number.isNaN(L) || Number.isNaN(A) || Number.isNaN(B) ) {
             throw new TypeError("LAB value is NaN. Values provided must be numbers.");
         }
-        if ( !inNormalUI(L) 
-            || !(A >= -128 && A <= 128)
-            || !(B >= -128 && A <= 128)
-        ) {
-            throw new Error(
-                "LAB value out of range. Values must be within the normalized Unit Interval"
-            );
-        }
+        if (!inNormalUI(L)) throw new Error( "Lightness value " + L + " must be in range 0 to 100");
+        if (!(A >= -128 && A <= 128)) throw new Error("A value " + A + " must be in range -128 to 128 " + L + " " + B);
+        if (!(B >= -128 && B <= 128)) throw new Error("A value " + B + " must be in range -128 to 128");
+
         return [L, A, B];
     }, 
     LVal : lab => lab[0],
@@ -53,15 +67,7 @@ const LAB = {
     BVal : lab => lab[2],
 }
 
-//Stores the coordinates of standard illuminants in XYZ Colorspace.
-const illuminant = {
-    'a' : XYZ.color(1.0985, 1.0000, 0.3558), //Tungsten Filament Lighting.
-    'c' : XYZ.color(0.9807, 1.0000, 1.1822), //Average Daylight.
-    'e' : XYZ.color(1.000, 1.000, 1.000), //Equal energy radiator
-    'D50' : XYZ.color(0.9642, 1.0000, 0.8249), // Horizon light at sunrise or sunset. ICC Standard Illuminant
-    'D55' : XYZ.color(0.9568, 1.0000, 0.9214), //Mid-morning or mid-afternoon daylight.
-    'D65' : XYZ.color(0.9505, 1.0000, 1.0890), //Daylight at Noon. 
-}
+
 
 //Given RGB tristimulus values in the unit interval, returns luminance  
 //or brightness of the color relative to reference white D65. Luminence is a 
@@ -88,7 +94,7 @@ function uniformPerception(XYZStim, whiteStim) {
     return ((841 / 108) * r) + (4 / 29);
 }
 
-function LABtoXYZ(lab, refWhite) {
+function LABtoXYZ(lab, refWhite=illuminant.D65, clamp=false) {
     let Yf = (LAB.LVal(lab) + 16) / 116,
         Xf = (LAB.AVal(lab) / 500) + Yf,
         Zf = Yf - (LAB.BVal(lab) / 200),
@@ -102,7 +108,7 @@ function LABtoXYZ(lab, refWhite) {
     temp = Math.pow(Zf, 3);
     let Zr = temp > e ? temp : (((116 * Zf) - 16) / k);
 
-    return XYZ.color(Xr * XYZ.xStim(refWhite), Yr * XYZ.yStim(refWhite), Zr * XYZ.zStim(refWhite));
+    return XYZ.color(Xr * XYZ.xStim(refWhite), Yr * XYZ.yStim(refWhite), Zr * XYZ.zStim(refWhite), refWhite, clamp);
 }
 
 //Converts normalized relative luminence to the perceived lightness or tone of that 
@@ -114,16 +120,24 @@ function lightness(Y) {
     return yr * 116 - 16;
 }
 
-function XYZtoLAB(xyz, refWhite) {
+function XYZtoLAB(xyz, refWhite=illuminant.D65) {
     let Xf = uniformPerception(XYZ.xStim(xyz), XYZ.xStim(refWhite));
     let Yf = uniformPerception(XYZ.yStim(xyz), XYZ.yStim(refWhite));
     let Zf = uniformPerception(XYZ.zStim(xyz), XYZ.zStim(refWhite));
-    console.log(Xf + " " + Yf + " " + Zf)
+
     let L = 116 * Yf - 16;
     let a = 500 * (Xf - Yf);
     let b = 200 * (Yf - Zf)
-    console.log(L + " " + a + " " + b)
+
     return LAB.color(L, a, b);
+}
+
+function adjustLight(lab, newLight) {
+    let adjust =  newLight - LAB.LVal(lab);
+    let a = (LAB.AVal(lab) - (500 * adjust / 116));
+    let b = (LAB.BVal(lab) + (200 * adjust / 116));
+ 
+    return LAB.color(newLight, a, b);;
 }
 
 module.exports = {
@@ -132,5 +146,8 @@ module.exports = {
     lightness,
     XYZtoLAB,
     LABtoXYZ,
-    illuminant
+    adjustLight,
+    illuminant,
+    LAB,
+    XYZ,
 }

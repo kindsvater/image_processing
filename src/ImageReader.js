@@ -46,23 +46,23 @@ const ImageReader = (function() {
         //this.pixels = pixelVector;
         return pixelVector;
     }
-    ImageReader.prototype.toLightness = function(range) {
+    ImageReader.prototype.toLightness = function(range=255) {
         //if (this.lightVector) ) Cache and also check range;
         let LVector = []
         this.eachColor((color) => {
             LVector.push(
                 Math.round(
-                    (lightness(relativeLuminence(linearize8Bit(color))) / 100) * range 
+                    (lightness(relativeLuminence(linearize8Bit(color)))) / 100 * range 
                 )
             );   
         });
         this.reset();
         return LVector;
     }
-    ImageReader.prototype.getLightIdxs = function(range) {
+    ImageReader.prototype.getLightIdxs = function(range=255) {
         let lVec = this.lightVector ? this.lightVector : this.toLightness(range);
         let lightIdxs = [];
-        for (let m = 0; m < lVec.length; m) {
+        for (let m = 0; m < lVec.length; m++) {
             if (!lightIdxs[lVec[m]]) {
                 lightIdxs[lVec[m]] = [];
             }

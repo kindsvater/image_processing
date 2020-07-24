@@ -1,3 +1,5 @@
+const { ImageReader } = require('./ImageReader.js');
+
 let img = new Image();
 let animate = false;
 let odd = true;
@@ -12,7 +14,7 @@ img.onload = function() {
     let whratio = this.height / this.width;
 
     let cwidth = 500;
-    let cheight = whratio * cwidth;
+    let cheight = whratio * cwidth
     canvas.width = cwidth;
     canvas.height = cheight;
     context.drawImage(this, 0, 0, cwidth, cheight);
@@ -55,6 +57,12 @@ img.onload = function() {
                 rawImgData[m * 4 + 3]
             ]);
         }
+        let read = new ImageReader(rawImgData, true);
+        let LI = read.getLightIdxs();
+        console.log("LI = ");
+        console.log(LI);
+        console.log("original");
+        console.log(lightIdxs);
         // let hist = [];
         // for (let i in lightIdxs) {
         //     hist.push({name: i, value: lightIdxs[i].length / rawImgData.length})

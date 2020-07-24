@@ -15,8 +15,15 @@ function inNormalUI(value) {
     return value >= 0 && value <= 100;
 }
 
+function clampTo(value, min, max) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+}
+
 module.exports = {
     is8BitInt,
     inUnitInterval,
-    inNormalUI
+    inNormalUI,
+    clampTo
 }

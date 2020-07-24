@@ -1,10 +1,10 @@
-const { rgba } = require("./../rgb.js");
-const { decodeGamma8Bit, relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('../srgb.js');
-const { lightnessToASCII, lightnessToGrayscale, rgbaGradient } = require("../colorpropconvert.js");
-const { lightness, XYZtoLAB, LABtoXYZ, illuminant } = require("./../cie.js");
-const { loadChanTreeFile, randomColorFromChanTreeBuff } = require("./../writeBrightnessFiles.js");
-const { histogram } = require("./../imgProcessing");
-const { ImageReader } = require("./../imgReader");
+const { rgba } = require("../src/rgb.js");
+const { decodeGamma8Bit, relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('../src/srgb.js');
+const { lightnessToASCII, lightnessToGrayscale, rgbaGradient } = require("../src/colorpropconvert.js");
+const { lightness, XYZtoLAB, LABtoXYZ, illuminant } = require("../src/cie.js");
+const { loadChanTreeFile, randomColorFromChanTreeBuff } = require("../src/writeBrightnessFiles.js");
+const { histogram } = require("../src/imgProcessing");
+const { ImageReader } = require("../src/ImageReader");
 const treeBuffPath = '255buff/ct' //'cieBuff/ct'
 
 function imgToRGBA(rawImgData) {
@@ -151,10 +151,6 @@ module.exports = {
         max,
         true
         )
-        let read = new ImageReader(rawImgData, true);
-        read.eachColor((color) => {
-            
-        })
 
         return hist.map((p, i) => {
             return {name: (i * binSize) + min, value : p}
