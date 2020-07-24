@@ -1,6 +1,6 @@
 const { is8BitInt, inUnitInterval } = require('./valuetype.js');
 const { multiply } = require('./lin.js');
-const { createRGBRelativeLuminance } = require('./rgb.js');
+const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
 
 //This matrix is used to convert linearized sRGB color to its corresponding color
 //in the XYZ colorspace. The XYZ color is the matrix product of the 
@@ -96,18 +96,24 @@ function sRGBtoXYZ(rgb) {
     let linRGB = linearize8Bit(rgb);
     return multiply(sRGBtoXYZMatrix, linRGB);
 }
-
+//Linearizes the 8Bit color channels of a gamm-encoded sRGB color.
 function linearize8Bit(rgb) {
     return rgb.map(cc => decodeGamma8Bit(cc));
 }
-
+//Gamma-encodes each color channel of a linear sRGB color to 8Bit values.
 function delinearize8Bit(rgb) {
     return rgb.map(cc => encodeGamma8Bit(cc));
 }
-
+//Converts XYZ color to Gamma-encoded sRGB
 function XYZtosRGB(xyz) {
     let linRGB = multiply(XYZtosRGBMatrix, xyz);
     return delinearize8Bit(linRGB);
+}
+
+//Creates gray sRGB color from gray value between 0 and 256. 
+//Set a to true if an RGBA output is desired.
+function gray(gVal, a=false) {
+    return a ? RGBA.color(gVal, gVal, gVal) : RGBA.color(gVal, gVal, gVal);
 }
 //Not a proper luma conversion for sRGB, 
 //relies on primaries and white point in NTSC color spaces like YIQ an YUV
@@ -133,5 +139,6 @@ module.exports = {
     'whitepointChroma' : whitepointChroma.matrix,
     relativeLuminence,
     sRGBtoXYZ,
-    XYZtosRGB
+    XYZtosRGB,
+    gray
 }

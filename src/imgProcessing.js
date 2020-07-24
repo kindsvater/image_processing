@@ -1,12 +1,11 @@
-const { rgb, rgba } = require('./rgb');
-const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./srgb');
+const { RGB, RGBA } = require('./RGB');
+const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./sRGB');
 const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie');
 const { ImageReader } = require('./ImageReader.js');
 
-
-//Given a flat array of rgb or rgba image data and a function to calculate a property of a color: creates a 
+//Given a flat array of RGB or RGBA image data and a function to calculate a property of a color: creates a 
 //n-bin normalized histogram of the calculated property value for each color in the image as long as the value
-//is within the specified range. The parameter a specifies the model for the image: true for rgba and false for rgb
+//is within the specified range. The parameter a specifies the model for the image: true for RGBA and false for RGB
 function histogram(img, calc, nbins, min, max, a=true) {
     if ((max - min + 1) % nbins !== 0) {
         throw new Error("Bin size is not an integer. Histogram range must be cleanly divisible by bin count");
@@ -57,7 +56,7 @@ function equalizeHist(cdf, range) {
     return equal;
 }
 
-//Given an rgba image, equalizes the lightness of the image between the minimum and maximum values
+//Given an RGBA image, equalizes the lightness of the image between the minimum and maximum values
 function equalizeImgLight(img, min, max) {
     let normHist = histogram(
         img,
@@ -102,11 +101,49 @@ function equalizeImgLight(img, min, max) {
     });
     let unclampedImg = [];
     for (let x = 0; x < equalImg.length; x++) {
-        unclampedImg.push(rgb.redLevel(equalImg[x]), rgb.greenLevel(equalImg[x]), rgb.blueLevel(equalImg[x]), 255);
+        unclampedImg.push(RGB.redLevel(equalImg[x]), RGB.greenLevel(equalImg[x]), RGB.blueLevel(equalImg[x]), 255);
     }
     return new Uint8ClampedArray(unclampedImg);
 }
 
+//Convolve n-sample time-domain signal with m-sample impulse response. Output sample calculations
+//are distributed across multiple input samples.
+function convolveInput(sig, ir) {
+    let Y = [],
+        i,
+        j;
+
+    for (i = 0; i < sig.length + ir.length; i++) {
+        Y[i] = 0;
+    }
+
+    for (i = 0; i < sig.length; i++) {
+        for (j = 0; j < ir.length; j++) {
+            Y[i + j] = Y[i + j] + (sig[i] * ir[j]);
+        }
+    }
+    return Y;  
+}
+
+//Convolve n-sample time-domain signal with m-sample impulse response. Output sample calculations
+//are performed independently of one another. 
+function convolveOutput(sig, ir) {
+    let Y = [],
+        i,
+        j;
+
+    for (i = 0; i < sig.length + ir.length; i++) {
+        Y[i] = 0
+        for (j = 0; j < ir.length; j++) {
+            if (i - j < 0) continue;
+            if (i - j > sig.length) continue;
+            Y[i] = Y[i] + (ir[j] * sig[i - j]);
+        }
+    }
+    return Y.slice(0, sig.length);
+}
+    // Is PSF Separable? 
+    // Separate the vertical and horizontal projections
 module.exports = {
     histogram,
     cdf,

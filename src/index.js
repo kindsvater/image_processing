@@ -1,8 +1,9 @@
 const { ImageReader } = require('./ImageReader.js');
 const { histogram, cdf, equalizeImgLight } = require('./imgProcessing');
-const { rgb, rgba } = require('./rgb');
+const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
+const { gaussGray } = require('./randGen');
 
 let img = new Image();
 let animate = false;
@@ -11,8 +12,9 @@ const lValRange = 255;
 const gradientSize = 25;
 const gradOffset = 15;
 const timestep = 30;
-
+img.src = 'img/flowers.jpg';
 img.onload = function() {
+    
     let canvas = document.getElementById("manip");
     let context = canvas.getContext('2d');
     let whratio = this.height / this.width;
@@ -47,6 +49,28 @@ img.onload = function() {
     //     contextData.data.set(rImageData);
     //     context.putImageData(contextData, 0, 0); 
     // })
+    let grays = gaussGray(rawImgData.length / 8, 32);
+    
+    let hist = [];
+    for (let m = 0; m < 256; m++) {
+        hist[m] = 0;
+    }
+    for (let g = 0; g < grays.length; g++) {
+        hist[grays[g]] += 1;
+    }
+
+    let data = [];
+    for (let i = 0; i < hist.length; i++) {
+        data.push({name: i, value: hist[i] / grays.length})
+    }
+    displayHistogram('#old', data, "steelblue", 500, 1200)
+    let grayImg = [];
+    for (let g = 0; g < grays.length; g++) {
+        grayImg.push(grays[g], grays[g], grays[g], 255);
+    }
+    contextData.data.set(new Uint8ClampedArray(grayImg));
+    context.putImageData(contextData, 0, 0); 
+
     getLightnessValuesofImg(rawImgData, cwidth, (light) => {
         let lightIdxs = {};
         let original = {};
@@ -64,16 +88,11 @@ img.onload = function() {
                 rawImgData[m * 4 + 3]
             ]);
         }
-        let eqimg = equalizeLightness(rawImgData);
-        console.log(eqimg)
-        contextData.data.set(eqimg);
-        context.putImageData(contextData, 0, 0); 
-        // let hist = [];
-        // for (let i in lightIdxs) {
-        //     hist.push({name: i, value: lightIdxs[i].length / rawImgData.length})
-        // }
-        
-        // createHistogram('#old', hist, "steelblue", 500, 1200)
+        // let eqimg = equalizeLightness(rawImgData);
+        // console.log(eqimg)
+        // contextData.data.set(eqimg);
+        // context.putImageData(contextData, 0, 0); 
+ 
         console.log("light Indexes")
         console.log(lightIdxs)
         document.getElementById('stop').addEventListener('click', function() {
@@ -96,10 +115,10 @@ img.onload = function() {
         });
     });
     getLightnessHistogram(rawImgData, (hst) => {
-        createHistogram('svg', hst, "steelblue", 500, 1200)
+        displayHistogram('svg', hst, "steelblue", 500, 1200)
     })  
 }
-img.src = 'img/me.jpg';
+
 
 function getLightnessHistogram(rawImgData, next) {
     let binCount = 101,
@@ -271,7 +290,7 @@ function getRandomColorsOfLight(x, L, next) {
     http.send('pixels=' + x + '&' + 'light=' + L);
 }
 
-function createHistogram(selector, data, color, height, width) {
+function displayHistogram(selector, data, color, height, width) {
     let svg = d3.select(selector);
     let margin = ({top: 30, right: 0, bottom: 30, left: 40});
     let yAxis = g => g

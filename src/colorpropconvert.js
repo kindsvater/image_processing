@@ -1,4 +1,4 @@
-const { rgba } = require('./rgb.js');
+const { RGBA } = require('./rgb.js');
 const PropConvert = module.exports;
 
 PropConvert.lightnessToASCII = (lightness) => {
@@ -13,20 +13,20 @@ PropConvert.lightnessToASCII = (lightness) => {
 
 PropConvert.lightnessToGrayscale = (lightness) => {
     grayValue = 255 * lightness / 100; //probably not a linear function but let's give it a go.
-    return rgba(grayValue, grayValue, grayValue);
+    return RGBA.color(grayValue, grayValue, grayValue);
 }
 
-PropConvert.rgbaGradient = (start, end, step) => {
+PropConvert.RGBAGradient = (start, end, step) => {
     let grad = [];
 
     for (let i = 0; i < step; i++) {
         let intenseEnd = i;
         let intenseStrt = step - i;
 
-        let color = rgba.color(
-            Math.round((intenseStrt * rgba.redLevel(start) + intenseEnd * rgba.redLevel(end)) / step),
-            Math.round((intenseStrt * rgba.greenLevel(start) + intenseEnd * rgba.greenLevel(end)) / step),
-            Math.round((intenseStrt * rgba.blueLevel(start) + intenseEnd * rgba.blueLevel(end)) / step)
+        let color = RGBA.color(
+            Math.round((intenseStrt * RGBA.redLevel(start) + intenseEnd * RGBA.redLevel(end)) / step),
+            Math.round((intenseStrt * RGBA.greenLevel(start) + intenseEnd * RGBA.greenLevel(end)) / step),
+            Math.round((intenseStrt * RGBA.blueLevel(start) + intenseEnd * RGBA.blueLevel(end)) / step)
         );
 
         grad.push(color);

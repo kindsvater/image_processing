@@ -1,5 +1,5 @@
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
-const { rgb, rgba } = require('./rgb');
+const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
 
@@ -14,12 +14,12 @@ const ImageReader = (function() {
     ImageReader.prototype.nextColor = function(a=false) {
         let color;
         if (a) {
-            color = rgba.color(
+            color = RGBA.color(
                 this.img[this.colorIdx], this.img[this.colorIdx + 1],
                 this.img[this.colorIdx + 2], this.img[this.colorIdx + 3]
             );
         } else {
-            color = rgb.color(
+            color = RGB.color(
                 this.img[this.colorIdx], this.img[this.colorIdx + 1], this.img[this.colorIdx + 2]
             );
         }
@@ -80,7 +80,53 @@ const ImageReader = (function() {
 module.exports = {
     ImageReader
 }
-},{"./cie":2,"./rgb":6,"./srgb":7}],2:[function(require,module,exports){
+},{"./cie":3,"./rgb":8,"./srgb":10}],2:[function(require,module,exports){
+const { invert, dot } = require('./lin.js');
+
+const redLevel = (rgbColor) => rgbColor[0];
+const greenLevel = (rgbColor) => rgbColor[1];
+const blueLevel = (rgbColor) => rgbColor[2];
+
+let rgb = module.exports
+
+rgb.RGBA = {
+    "color" : (r, g, b, a) => [r, g, b, a ? a : 255],
+    redLevel,
+    greenLevel,
+    blueLevel,
+    "alphaLevel" : (rgbaColor) => rgbaColor[3]
+} 
+
+rgb.RGB = {
+    color : (r, g, b) => [r, g, b],
+    redLevel,
+    greenLevel,
+    blueLevel
+} 
+
+rgb.averageChannelLevel = (rgbColor) => (rgbColor[0] + rgbColor[1] + rgbColor[2]) / 3;
+rgb.XYZconversionMatrix = (primaryCoords, XYZWhite) => {
+    let primXYZ = [
+        [primaryCoords[0][0],primaryCoords[1][0], primaryCoords[2][0]],
+        [primaryCoords[0][1],primaryCoords[1][1], primaryCoords[2][1]],
+        [primaryCoords[0][2],primaryCoords[1][2], primaryCoords[2][2]],
+    ]
+
+    let iPXYZ = invert(primXYZ);
+    let XYZScalars = multiply(iPXYZ, XYZWhite);
+    scaleMatrix = [[XYZScalars[0], 0, 0], [0, XYZScalars[1], 0], [0, 0, XYZScalars[2]]];
+    return multiply(primXYZ, scaleMatrix);
+}
+
+function rgbWhiteToXYZ(whiteCoords) {
+    whiteY = greenLevel(whiteCoords);
+    return whiteCoords.map( cc => cc / whiteY);
+}
+
+rgb.createRGBRelativeLuminance = (XYZconversionMatrix) =>
+    rgb => dot([redLevel(rgb), greenLevel(rgb), blueLevel(rgb)], XYZconversionMatrix[1]);
+
+},{"./lin.js":6}],3:[function(require,module,exports){
 const { inNormalUI, clampTo } =  require('./valuetype.js');
 
 //Device Invariant Representation of Color. The tristimulus values X, Y, and Z technically
@@ -235,16 +281,15 @@ module.exports = {
     XYZ,
 }
 
-},{"./valuetype.js":8}],3:[function(require,module,exports){
-const { rgb, rgba } = require('./rgb');
-const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./srgb');
+},{"./valuetype.js":11}],4:[function(require,module,exports){
+const { RGB, RGBA } = require('./RGB');
+const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./sRGB');
 const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie');
 const { ImageReader } = require('./ImageReader.js');
 
-
-//Given a flat array of rgb or rgba image data and a function to calculate a property of a color: creates a 
+//Given a flat array of RGB or RGBA image data and a function to calculate a property of a color: creates a 
 //n-bin normalized histogram of the calculated property value for each color in the image as long as the value
-//is within the specified range. The parameter a specifies the model for the image: true for rgba and false for rgb
+//is within the specified range. The parameter a specifies the model for the image: true for RGBA and false for RGB
 function histogram(img, calc, nbins, min, max, a=true) {
     if ((max - min + 1) % nbins !== 0) {
         throw new Error("Bin size is not an integer. Histogram range must be cleanly divisible by bin count");
@@ -295,7 +340,7 @@ function equalizeHist(cdf, range) {
     return equal;
 }
 
-//Given an rgba image, equalizes the lightness of the image between the minimum and maximum values
+//Given an RGBA image, equalizes the lightness of the image between the minimum and maximum values
 function equalizeImgLight(img, min, max) {
     let normHist = histogram(
         img,
@@ -340,23 +385,62 @@ function equalizeImgLight(img, min, max) {
     });
     let unclampedImg = [];
     for (let x = 0; x < equalImg.length; x++) {
-        unclampedImg.push(rgb.redLevel(equalImg[x]), rgb.greenLevel(equalImg[x]), rgb.blueLevel(equalImg[x]), 255);
+        unclampedImg.push(RGB.redLevel(equalImg[x]), RGB.greenLevel(equalImg[x]), RGB.blueLevel(equalImg[x]), 255);
     }
     return new Uint8ClampedArray(unclampedImg);
 }
 
+//Convolve n-sample time-domain signal with m-sample impulse response. Output sample calculations
+//are distributed across multiple input samples.
+function convolveInput(sig, ir) {
+    let Y = [],
+        i,
+        j;
+
+    for (i = 0; i < sig.length + ir.length; i++) {
+        Y[i] = 0;
+    }
+
+    for (i = 0; i < sig.length; i++) {
+        for (j = 0; j < ir.length; j++) {
+            Y[i + j] = Y[i + j] + (sig[i] * ir[j]);
+        }
+    }
+    return Y;  
+}
+
+//Convolve n-sample time-domain signal with m-sample impulse response. Output sample calculations
+//are performed independently of one another. 
+function convolveOutput(sig, ir) {
+    let Y = [],
+        i,
+        j;
+
+    for (i = 0; i < sig.length + ir.length; i++) {
+        Y[i] = 0
+        for (j = 0; j < ir.length; j++) {
+            if (i - j < 0) continue;
+            if (i - j > sig.length) continue;
+            Y[i] = Y[i] + (ir[j] * sig[i - j]);
+        }
+    }
+    return Y.slice(0, sig.length);
+}
+    // Is PSF Separable? 
+    // Separate the vertical and horizontal projections
 module.exports = {
     histogram,
     cdf,
     equalizeHist,
     equalizeImgLight
 }
-},{"./ImageReader.js":1,"./cie":2,"./rgb":6,"./srgb":7}],4:[function(require,module,exports){
+},{"./ImageReader.js":1,"./RGB":2,"./cie":3,"./sRGB":9}],5:[function(require,module,exports){
 const { ImageReader } = require('./ImageReader.js');
 const { histogram, cdf, equalizeImgLight } = require('./imgProcessing');
-const { rgb, rgba } = require('./rgb');
+const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
+const { gaussGray } = require('./randGen');
 
 let img = new Image();
 let animate = false;
@@ -365,8 +449,9 @@ const lValRange = 255;
 const gradientSize = 25;
 const gradOffset = 15;
 const timestep = 30;
-
+img.src = 'img/flowers.jpg';
 img.onload = function() {
+    
     let canvas = document.getElementById("manip");
     let context = canvas.getContext('2d');
     let whratio = this.height / this.width;
@@ -401,6 +486,28 @@ img.onload = function() {
     //     contextData.data.set(rImageData);
     //     context.putImageData(contextData, 0, 0); 
     // })
+    let grays = gaussGray(rawImgData.length / 8, 32);
+    
+    let hist = [];
+    for (let m = 0; m < 256; m++) {
+        hist[m] = 0;
+    }
+    for (let g = 0; g < grays.length; g++) {
+        hist[grays[g]] += 1;
+    }
+
+    let data = [];
+    for (let i = 0; i < hist.length; i++) {
+        data.push({name: i, value: hist[i] / grays.length})
+    }
+    displayHistogram('#old', data, "steelblue", 500, 1200)
+    let grayImg = [];
+    for (let g = 0; g < grays.length; g++) {
+        grayImg.push(grays[g], grays[g], grays[g], 255);
+    }
+    contextData.data.set(new Uint8ClampedArray(grayImg));
+    context.putImageData(contextData, 0, 0); 
+
     getLightnessValuesofImg(rawImgData, cwidth, (light) => {
         let lightIdxs = {};
         let original = {};
@@ -418,16 +525,11 @@ img.onload = function() {
                 rawImgData[m * 4 + 3]
             ]);
         }
-        let eqimg = equalizeLightness(rawImgData);
-        console.log(eqimg)
-        contextData.data.set(eqimg);
-        context.putImageData(contextData, 0, 0); 
-        // let hist = [];
-        // for (let i in lightIdxs) {
-        //     hist.push({name: i, value: lightIdxs[i].length / rawImgData.length})
-        // }
-        
-        // createHistogram('#old', hist, "steelblue", 500, 1200)
+        // let eqimg = equalizeLightness(rawImgData);
+        // console.log(eqimg)
+        // contextData.data.set(eqimg);
+        // context.putImageData(contextData, 0, 0); 
+ 
         console.log("light Indexes")
         console.log(lightIdxs)
         document.getElementById('stop').addEventListener('click', function() {
@@ -450,10 +552,10 @@ img.onload = function() {
         });
     });
     getLightnessHistogram(rawImgData, (hst) => {
-        createHistogram('svg', hst, "steelblue", 500, 1200)
+        displayHistogram('svg', hst, "steelblue", 500, 1200)
     })  
 }
-img.src = 'img/me.jpg';
+
 
 function getLightnessHistogram(rawImgData, next) {
     let binCount = 101,
@@ -625,7 +727,7 @@ function getRandomColorsOfLight(x, L, next) {
     http.send('pixels=' + x + '&' + 'light=' + L);
 }
 
-function createHistogram(selector, data, color, height, width) {
+function displayHistogram(selector, data, color, height, width) {
     let svg = d3.select(selector);
     let margin = ({top: 30, right: 0, bottom: 30, left: 40});
     let yAxis = g => g
@@ -667,7 +769,7 @@ function createHistogram(selector, data, color, height, width) {
     svg.append("g").call(yAxis);
 }
 
-},{"./ImageReader.js":1,"./cie":2,"./imgProcessing":3,"./rgb":6,"./srgb":7}],5:[function(require,module,exports){
+},{"./ImageReader.js":1,"./cie":3,"./imgProcessing":4,"./randGen":7,"./rgb":8,"./srgb":10}],6:[function(require,module,exports){
 //Calculates and returns the inverse of a square matrix. If matrix is not valid or not square, returns false.
 function invert(square) {
     let sDim = dim(square);
@@ -852,31 +954,137 @@ module.exports = {
     multiply,
     dot
 }
-},{}],6:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
+const { clampTo } = require('./valuetype.js');
+//Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
+//probabilities of two outcomes. Probability in excess of a is distributed evenly 
+//using a RobinHood algorithm. Returns arrays K and V where K is indices of
+//the outcomes in the upper halves of each bin and V is the probability of the
+//outcome in the lower halves of the bins. 
+function robinHoodSquaredProbHistogram(p) {
+    let K = []; //Indices corresponding to top of bar
+    let V = []; //Bar division point
+    let n = p.length;
+    let a = 1 / n;
+    let i = 0
+    let j = 0; //i is index of min p. j is index of max p
 
+    for (let y = 0; y < n; y++) {
+        K[y] = y;
+        V[y] = (y + 1) * a;
+    }
+
+    for (let m = 0; m < n - 1; m++) {
+
+        //1. Find the indices i of minimum probability and j of maximum probability
+        for (let s = 0; s < p.length; s++) {
+            if (p[s] < p[i]) {
+                i = s;
+            } else if (p[s] > p[j]) {
+                j = s;
+            }
+        }
+        //2. Distribute probability above a from maximum bar to minimum bar
+        K[i] = j;
+        V[i] = (i * a) + p[i];
+        p[j] = p[j] - (a - p[i]);
+        p[i] = a;
+    }
+
+    return {'K': K, 'V': V}
+}
+
+//Generates a random index from a probability histogram. 
+//A probability histogram is represented by the arrays K and V
+//First generates a random float from 0 through 1. 
+//stored in arr
+function randProbHistogramInt(K, V) {
+    //check that K and V are arrays of the same length
+    let n = K.length;
+    let U = Math.random();
+    let j = Math.floor(n * U);
+    if (U < V[j]) {
+        return j;
+    }
+    return K[j];
+}
+
+//Returns an integer >= min and < min + range
+function randInt(min, range) {
+    return Math.floor(Math.random() * range) + min;
+}
+
+function BoxMuller(xy=false) {
+    let U1 = Math.random(),
+        U2 = Math.random(),
+        x;
+    if (U1 === 0) { x = 0 }
+    else { x = Math.sqrt(-2 * Math.log(U1)) * Math.cos(2 * Math.PI * U2)}
+    
+    if (Number.isNaN(x)) {
+        throw new Error("Generated values " + U1 + " " + U2 + "are undefined for BoxMuller method");
+    }
+
+    if (xy) {
+        let y = Math.sqrt(-2 * Math.log(U1)) * Math.sin(2 * Math.PI * U2);
+        return [x, y]
+    }
+    return x;  
+}
+
+function gaussBoxMuller(mean, stdDev, xy=false) {
+    let normRand = BoxMuller(xy);
+
+    if (xy) return [normRand[0] * stdDev + mean, normRand[1] * stdDev + mean];
+    return normRand * stdDev + mean;
+}
+
+//Generates random gray value from gaussian distribution. Suggested stdDeviations: 16, 32, 64, 84
+function gaussGray(res, stdDev, mean=128) {
+    let randGray = [],
+        p = 0,
+        gVal;
+
+    if (res % 2 === 1) {
+       gVal = clampTo(Math.round(gaussBoxMuller(mean, stdDev, false)),0, 255, true);
+       randGray.push(gVal);
+       p++;
+    }
+    while (p < res) {
+        gVal = gaussBoxMuller(mean, stdDev, true);
+        randGray.push(Math.round(clampTo(gVal[0], 0, 255, true)));
+        randGray.push(Math.round(clampTo(gVal[1], 0, 255, true)));
+        p++;
+    }
+    return randGray;
+}
+// function gauss
+module.exports.rhSquaredProbHist = robinHoodSquaredProbHistogram;
+module.exports.randPHistInt = randProbHistogramInt;
+module.exports.randInt = randInt;
+module.exports.gaussGray = gaussGray;
+
+
+},{"./valuetype.js":11}],8:[function(require,module,exports){
 const { invert, dot } = require('./lin.js');
-
 const redLevel = (rgbColor) => rgbColor[0];
 const greenLevel = (rgbColor) => rgbColor[1];
 const blueLevel = (rgbColor) => rgbColor[2];
+const rgb = module.exports
 
-let rgb = module.exports
-
-rgb.rgba = {
+rgb.RGBA = {
     "color" : (r, g, b, a) => [r, g, b, a ? a : 255],
     redLevel,
     greenLevel,
     blueLevel,
     "alphaLevel" : (rgbaColor) => rgbaColor[3]
 } 
-
-rgb.rgb = {
+rgb.RGB = {
     color : (r, g, b) => [r, g, b],
     redLevel,
     greenLevel,
     blueLevel
 } 
-
 rgb.averageChannelLevel = (rgbColor) => (rgbColor[0] + rgbColor[1] + rgbColor[2]) / 3;
 rgb.XYZconversionMatrix = (primaryCoords, XYZWhite) => {
     let primXYZ = [
@@ -899,7 +1107,7 @@ function rgbWhiteToXYZ(whiteCoords) {
 rgb.createRGBRelativeLuminance = (XYZconversionMatrix) =>
     rgb => dot([redLevel(rgb), greenLevel(rgb), blueLevel(rgb)], XYZconversionMatrix[1]);
 
-},{"./lin.js":5}],7:[function(require,module,exports){
+},{"./lin.js":6}],9:[function(require,module,exports){
 const { is8BitInt, inUnitInterval } = require('./valuetype.js');
 const { multiply } = require('./lin.js');
 const { createRGBRelativeLuminance } = require('./rgb.js');
@@ -1038,7 +1246,153 @@ module.exports = {
     XYZtosRGB
 }
 
-},{"./lin.js":5,"./rgb.js":6,"./valuetype.js":8}],8:[function(require,module,exports){
+},{"./lin.js":6,"./rgb.js":8,"./valuetype.js":11}],10:[function(require,module,exports){
+const { is8BitInt, inUnitInterval } = require('./valuetype.js');
+const { multiply } = require('./lin.js');
+const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
+
+//This matrix is used to convert linearized sRGB color to its corresponding color
+//in the XYZ colorspace. The XYZ color is the matrix product of the 
+//linearized sRGB color vector and the conversion matrix. 
+const sRGBtoXYZMatrix = [
+    [0.41239079926595923, 0.35758433938387785, 0.1804807884018343],
+    [0.21263900587151022, 0.7151686787677557, 0.07219231536073371],
+    [0.019330818715591835,0.11919477979462596, 0.9505321522496606]
+]
+
+const XYZtosRGBMatrix = [
+    [3.2404542, -1.5371385, -0.4985314],
+    [-0.9692660,  1.8760108,  0.0415560],
+    [0.0556434, -0.2040259,  1.0572252]
+]
+
+//Coordinates of sRGB red green and blue primary colors in linearized 3D space. 
+const primaryChromaticityCoordinates = {
+    matrix : [
+        [0.64, 0.33, 0.03],
+        [0.30, 0.60, 0.10],
+        [0.15, 0.06, 0.79]
+    ],
+    obj : {
+        r : {
+            x : 0.64,
+            y : 0.33,
+            z : 0.03
+        },
+        g : {
+            x : 0.30,
+            y : 0.60,
+            z : 0.10
+        },
+        b : {
+            x : 0.15,
+            y : 0.06,
+            z : 0.79
+        }
+    }
+}
+
+//Chromaticity Coordinates of sRGB reference white (CIE Illuminant D65) in linear 3D space.
+const whitepointChroma = {
+    matrix : [0.3127, 0.3290, 0.3583],
+    obj : {
+        x : 0.3127,
+        y : 0.3290,
+        z : 0.3583
+    }
+}
+
+//Given a linearized sRGB color, calculates the Relative Luminence of the color. 
+//Relative Luminence is the Y stimulus in the XYZ colorspace.
+const relativeLuminence = createRGBRelativeLuminance(sRGBtoXYZMatrix);
+
+//Linearizes sRGB gamma-encoded color channel value in unit interval by applying
+// sRGGB gamma decoding step-function. Value returned is in unit interval. 
+function decodeGammaUI(stimulus) {
+    if (stimulus < 0.04045) {
+        return stimulus / 12.92;
+    } else {
+        return Math.pow(((stimulus + 0.055) / 1.055), 2.4);
+    }
+}
+
+//Linearizes sRGB gamma-encoded  8bit color channel value by applying
+// sRGB gamma decoding step function. Value returned is in unit interval.
+function decodeGamma8Bit(colorChannel) {
+    let uiCC = colorChannel / 255;
+    return decodeGammaUI(uiCC);
+}
+
+//From linear stimulus in unit Interval applies sRGB piecewise gamma encoding function .
+// Returned value is in Unit Interval.
+function encodeGammaUI(linStim) {
+    if (linStim < 0.00313080495) {
+        return linStim * 12.92;
+    } else {
+        return Math.pow(linStim, 1 / 2.4) * 1.055 - 0.055;
+    }
+}
+
+//From linear stimulus in unit interval applies sRGB piecewise gamma encoding function .
+// Returned value is 8Bit Integer.
+function encodeGamma8Bit(linStim) {
+    let uiCC = encodeGammaUI(linStim);
+    return Math.round(uiCC * 255); 
+}
+
+//Converts sRGB color to XYZ colorspace.
+function sRGBtoXYZ(rgb) {
+    let linRGB = linearize8Bit(rgb);
+    return multiply(sRGBtoXYZMatrix, linRGB);
+}
+//Linearizes the 8Bit color channels of a gamm-encoded sRGB color.
+function linearize8Bit(rgb) {
+    return rgb.map(cc => decodeGamma8Bit(cc));
+}
+//Gamma-encodes each color channel of a linear sRGB color to 8Bit values.
+function delinearize8Bit(rgb) {
+    return rgb.map(cc => encodeGamma8Bit(cc));
+}
+//Converts XYZ color to Gamma-encoded sRGB
+function XYZtosRGB(xyz) {
+    let linRGB = multiply(XYZtosRGBMatrix, xyz);
+    return delinearize8Bit(linRGB);
+}
+
+//Creates gray sRGB color from gray value between 0 and 256. 
+//Set a to true if an RGBA output is desired.
+function gray(gVal, a=false) {
+    return a ? RGBA.color(gVal, gVal, gVal) : RGBA.color(gVal, gVal, gVal);
+}
+//Not a proper luma conversion for sRGB, 
+//relies on primaries and white point in NTSC color spaces like YIQ an YUV
+// function lumaCCIR601(rPrime, gPrime, bPrime) {
+//     let YPrime = 0.299 * rPrime + 0.587 * gPrime + 0.114 * bPrime;
+//     return YPrime;
+// }
+
+//Again not a proper luma function for sRGB, output should be luma values between 16 and 235
+//This function produces values from 0 to 255 which must be clamped.
+// function lumaBT709(rPrime, gPrime, bPrime) {
+//     let luma = 0.2126 * rPrime + 0.7152 * gPrime + 0.0722 * bPrime;
+//     return luma;
+// }
+
+module.exports = {
+    decodeGammaUI,
+    decodeGamma8Bit,
+    encodeGammaUI,
+    encodeGamma8Bit,
+    linearize8Bit,
+    'primaryChroma' : primaryChromaticityCoordinates.matrix,
+    'whitepointChroma' : whitepointChroma.matrix,
+    relativeLuminence,
+    sRGBtoXYZ,
+    XYZtosRGB,
+    gray
+}
+
+},{"./lin.js":6,"./rgb.js":8,"./valuetype.js":11}],11:[function(require,module,exports){
 function is8BitInt(value) {
     return (!isNaN(channelValue)
         && Number.isInteger(+channelValue)
@@ -1056,9 +1410,9 @@ function inNormalUI(value) {
     return value >= 0 && value <= 100;
 }
 
-function clampTo(value, min, max) {
-    if (value < min) return min;
-    if (value > max) return max;
+function clampTo(value, min, max, alias=false) {
+    if (value < min) return alias ? min + ((min - value) % (max - min)) : min;
+    if (value > max) return alias ? max - (value % (max - min)) : max;
     return value;
 }
 
@@ -1068,4 +1422,4 @@ module.exports = {
     inNormalUI,
     clampTo
 }
-},{}]},{},[4]);
+},{}]},{},[5]);

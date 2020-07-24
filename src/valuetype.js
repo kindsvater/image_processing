@@ -15,9 +15,9 @@ function inNormalUI(value) {
     return value >= 0 && value <= 100;
 }
 
-function clampTo(value, min, max) {
-    if (value < min) return min;
-    if (value > max) return max;
+function clampTo(value, min, max, alias=false) {
+    if (value < min) return alias ? min + ((min - value) % (max - min)) : min;
+    if (value > max) return alias ? max - (value % (max - min)) : max;
     return value;
 }
 

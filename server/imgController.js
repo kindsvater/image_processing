@@ -1,4 +1,4 @@
-const { rgba } = require("../src/rgb.js");
+const { RGBA } = require("../src/rgb.js");
 const { decodeGamma8Bit, relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('../src/srgb.js');
 const { lightnessToASCII, lightnessToGrayscale, rgbaGradient } = require("../src/colorpropconvert.js");
 const { lightness, XYZtoLAB, LABtoXYZ, illuminant } = require("../src/cie.js");
@@ -14,7 +14,7 @@ function imgToRGBA(rawImgData) {
     for (let i = 1; i <= rawImgData.length; i ++) {
         colorChannels.push(rawImgData[i - 1]);
         if (i % 4 === 0) {
-            colorList.push(rgba.color.apply(null, colorChannels));
+            colorList.push(RGBA.color.apply(null, colorChannels));
             colorChannels = [];
         }
     }
@@ -89,7 +89,7 @@ module.exports = {
                 buff = cachedBuffers[L];
             }
             let color = randomColorFromChanTreeBuff(buff, [1,0,2]);
-            return rgba.color(color[0], color[1], color[2]);
+            return RGBA.color(color[0], color[1], color[2]);
         });
         return randImg;
     },
@@ -107,7 +107,7 @@ module.exports = {
                 colorCache[L] = color;
             }
 
-            return rgba.color(color[0], color[1], color[2]);
+            return RGBA.color(color[0], color[1], color[2]);
         });
         return randImg;
     },
@@ -120,7 +120,7 @@ module.exports = {
             let filename = treeBuffPath + i;
             let buff = loadChanTreeFile(filename);
             color = randomColorFromChanTreeBuff(buff, [1,0,2]);
-            lightGrad[i] = rgba.color(color[0], color[1], color[2]);
+            lightGrad[i] = RGBA.color(color[0], color[1], color[2]);
         }
         for (let i = 0; i < 100; i += 10) {
             let gradient = rgbaGradient(lightGrad[i], lightGrad[i + 10], 11);
@@ -166,7 +166,7 @@ module.exports = {
                     console.log("!!! " + r)
                 }
             }
-            colors.push(rgba.color(r[0], r[1], r[2]));
+            colors.push(RGBA.color(r[0], r[1], r[2]));
         }
         return colors;
     }

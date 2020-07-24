@@ -1,27 +1,22 @@
-
 const { invert, dot } = require('./lin.js');
-
 const redLevel = (rgbColor) => rgbColor[0];
 const greenLevel = (rgbColor) => rgbColor[1];
 const blueLevel = (rgbColor) => rgbColor[2];
+const rgb = module.exports
 
-let rgb = module.exports
-
-rgb.rgba = {
+rgb.RGBA = {
     "color" : (r, g, b, a) => [r, g, b, a ? a : 255],
     redLevel,
     greenLevel,
     blueLevel,
     "alphaLevel" : (rgbaColor) => rgbaColor[3]
 } 
-
-rgb.rgb = {
+rgb.RGB = {
     color : (r, g, b) => [r, g, b],
     redLevel,
     greenLevel,
     blueLevel
 } 
-
 rgb.averageChannelLevel = (rgbColor) => (rgbColor[0] + rgbColor[1] + rgbColor[2]) / 3;
 rgb.XYZconversionMatrix = (primaryCoords, XYZWhite) => {
     let primXYZ = [

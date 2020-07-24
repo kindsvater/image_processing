@@ -1,4 +1,4 @@
-const { rgb, rgba } = require('./rgb');
+const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
 
@@ -13,12 +13,12 @@ const ImageReader = (function() {
     ImageReader.prototype.nextColor = function(a=false) {
         let color;
         if (a) {
-            color = rgba.color(
+            color = RGBA.color(
                 this.img[this.colorIdx], this.img[this.colorIdx + 1],
                 this.img[this.colorIdx + 2], this.img[this.colorIdx + 3]
             );
         } else {
-            color = rgb.color(
+            color = RGB.color(
                 this.img[this.colorIdx], this.img[this.colorIdx + 1], this.img[this.colorIdx + 2]
             );
         }

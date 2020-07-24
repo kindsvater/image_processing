@@ -1,3 +1,4 @@
+const { clampTo } = require('./valuetype.js');
 //Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
 //probabilities of two outcomes. Probability in excess of a is distributed evenly 
 //using a RobinHood algorithm. Returns arrays K and V where K is indices of
@@ -56,8 +57,53 @@ function randInt(min, range) {
     return Math.floor(Math.random() * range) + min;
 }
 
+function BoxMuller(xy=false) {
+    let U1 = Math.random(),
+        U2 = Math.random(),
+        x;
+    if (U1 === 0) { x = 0 }
+    else { x = Math.sqrt(-2 * Math.log(U1)) * Math.cos(2 * Math.PI * U2)}
+    
+    if (Number.isNaN(x)) {
+        throw new Error("Generated values " + U1 + " " + U2 + "are undefined for BoxMuller method");
+    }
+
+    if (xy) {
+        let y = Math.sqrt(-2 * Math.log(U1)) * Math.sin(2 * Math.PI * U2);
+        return [x, y]
+    }
+    return x;  
+}
+
+function gaussBoxMuller(mean, stdDev, xy=false) {
+    let normRand = BoxMuller(xy);
+
+    if (xy) return [normRand[0] * stdDev + mean, normRand[1] * stdDev + mean];
+    return normRand * stdDev + mean;
+}
+
+//Generates random gray value from gaussian distribution. Suggested stdDeviations: 16, 32, 64, 84
+function gaussGray(res, stdDev, mean=128) {
+    let randGray = [],
+        p = 0,
+        gVal;
+
+    if (res % 2 === 1) {
+       gVal = clampTo(Math.round(gaussBoxMuller(mean, stdDev, false)),0, 255, true);
+       randGray.push(gVal);
+       p++;
+    }
+    while (p < res) {
+        gVal = gaussBoxMuller(mean, stdDev, true);
+        randGray.push(Math.round(clampTo(gVal[0], 0, 255, true)));
+        randGray.push(Math.round(clampTo(gVal[1], 0, 255, true)));
+        p++;
+    }
+    return randGray;
+}
 // function gauss
 module.exports.rhSquaredProbHist = robinHoodSquaredProbHistogram;
 module.exports.randPHistInt = randProbHistogramInt;
 module.exports.randInt = randInt;
+module.exports.gaussGray = gaussGray;
 
