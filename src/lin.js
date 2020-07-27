@@ -1,3 +1,12 @@
+//Calculates and returns the magnitude (spatial length) of a vector.
+function mag(vector) {
+    let m = 0;
+    for (let i = 0; i < vector.length; i++) {
+        m += vector[i] * vector[i];
+    }
+    return Math.sqrt(m);
+}
+
 //Calculates and returns the inverse of a square matrix. If matrix is not valid or not square, returns false.
 function invert(square) {
     let sDim = dim(square);
@@ -180,5 +189,6 @@ module.exports = {
     dim,
     invert,
     multiply,
-    dot
+    dot,
+    mag
 }

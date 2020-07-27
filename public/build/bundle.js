@@ -390,86 +390,7 @@ function equalizeImgLight(img, min, max) {
     return new Uint8ClampedArray(unclampedImg);
 }
 
-//Given two signals and 
-function correlate(sig1, sig2) {
-    let preFlip = sig2.reverse();
-    return convolveOutput(sig1, preFlip);
-}
-//Convolve n-sample time-domain signal with m-sample impulse response. Output sample calculations
-//are distributed across multiple input samples.
-function convolveInput(sig, ir) {
-    let Y = [],
-        i,
-        j;
 
-    for (i = 0; i < sig.length + ir.length; i++) {
-        Y[i] = 0;
-    }
-
-    for (i = 0; i < sig.length; i++) {
-        for (j = 0; j < ir.length; j++) {
-            Y[i + j] = Y[i + j] + (sig[i] * ir[j]);
-        }
-    }
-    return Y;  
-}
-
-//Convolve n-sample time-domain signal with m-sample impulse response. Output sample calculations
-//are performed independently of one another. 
-function convolveOutput(sig, ir) {
-    let Y = [],
-        i,
-        j;
-
-    for (i = 0; i < sig.length + ir.length; i++) {
-        Y[i] = 0
-        for (j = 0; j < ir.length; j++) {
-            if (i - j < 0) continue;
-            if (i - j > sig.length) continue;
-            Y[i] = Y[i] + (ir[j] * sig[i - j]);
-        }
-    }
-    return Y.slice(0, sig.length);
-}
-
-//From two n / 2 + 1 sized vectors of real and imaginary components. Synthesizes n point signal.
-function inverseDFT(ReX, ImX) {
-    if (ReX.length !== ImX.length) throw new Error("Real and Imaginary vectors must be the same length");
-    let X = [],
-        cosX = [],
-        sinX = [],
-        n = ReX.length + ImX.length - 2;
-        i,
-        j;
-
-    for (i = 0; i < (n / 2) + 1; i++) {
-        cosX[i] = ReX[i] / (n / 2); //convert real signal to cos amplitude scalars
-        sinX[i] = - ImX[i] / (n / 2); //convert imaginary signal to sin amplitude scalars
-    }
-    cosX[0] = ReX[0] / n;
-    cosX[ReX.length - 1] = ReX[ReX.length - 1] / n;
-
-    for (i = 0; i < n; i++) {
-        X[i] = 0; //Initialize time-domain signal 
-        //Sum scaled basis functions for each frequency
-        for (j = 0; j < (n / 2) + 1; j++) {
-            X[i] = X[i] + cosX[j] * Math.cos(2 * Math.PI * j * i / n);
-            X[i] = X[i] + sinX[j] * Math.sin(2 * Math.PI * j * i / n);
-        }
-    }
-    return X;
-}
-
-function discreteFourierTransform(sig) {
-    let ReX = [],
-        ImX = [];
-
-    
-
-    return { ReX, ImX }
-}
-    // Is PSF Separable? 
-    // Separate the vertical and horizontal projections
 module.exports = {
     histogram,
     cdf,
@@ -812,6 +733,15 @@ function displayHistogram(selector, data, color, height, width) {
 }
 
 },{"./ImageReader.js":1,"./cie":3,"./imgProcessing":4,"./randGen":7,"./rgb":8,"./srgb":10}],6:[function(require,module,exports){
+//Calculates and returns the magnitude (spatial length) of a vector.
+function mag(vector) {
+    let m = 0;
+    for (let i = 0; i < vector.length; i++) {
+        m += vector[i] * vector[i];
+    }
+    return Math.sqrt(m);
+}
+
 //Calculates and returns the inverse of a square matrix. If matrix is not valid or not square, returns false.
 function invert(square) {
     let sDim = dim(square);
@@ -994,7 +924,8 @@ module.exports = {
     dim,
     invert,
     multiply,
-    dot
+    dot,
+    mag
 }
 },{}],7:[function(require,module,exports){
 const { clampTo } = require('./valuetype.js');
@@ -1458,10 +1389,23 @@ function clampTo(value, min, max, alias=false) {
     return value;
 }
 
+//From User Tim Down.
+//https://stackoverflow.com/questions/3108986/gaussian-bankers-rounding-in-javascript
+function bankRound(num, decimalPlaces=0) {
+    let m = Math.pow(10, d);
+    let n = +(decimalPlaces ? num * m : num).toFixed(8); //Avoid Rounding Errors
+    let i = Math.floor(n), f = n - i;
+    let e = 1e-8; //Allow for rounding errors in f
+    let r = (f > 0.5 - e && f < 0.5 + e) ? 
+        ((i % 2 === 0) ? i : i + 1) : Math.round(n);
+    return d ? r / m : r;
+}
+
 module.exports = {
     is8BitInt,
     inUnitInterval,
     inNormalUI,
-    clampTo
+    clampTo,
+    bankRound
 }
 },{}]},{},[5]);
