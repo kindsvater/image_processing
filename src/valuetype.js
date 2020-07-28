@@ -24,13 +24,25 @@ function clampTo(value, min, max, alias=false) {
 //From User Tim Down.
 //https://stackoverflow.com/questions/3108986/gaussian-bankers-rounding-in-javascript
 function bankRound(num, decimalPlaces=0) {
-    let m = Math.pow(10, d);
+    let m = Math.pow(10, decimalPlaces);
     let n = +(decimalPlaces ? num * m : num).toFixed(8); //Avoid Rounding Errors
     let i = Math.floor(n), f = n - i;
     let e = 1e-8; //Allow for rounding errors in f
     let r = (f > 0.5 - e && f < 0.5 + e) ? 
         ((i % 2 === 0) ? i : i + 1) : Math.round(n);
-    return d ? r / m : r;
+    return decimalPlaces ? r / m : r;
+}
+
+function zeros(n, m=0) {
+    let z = [];
+    for (let i = 0; i < n; i++) {
+        if (m > 0) z[i] = [];
+        else z[i] = 0;
+        for (let j = 0; j < m; j++) {
+            z[i][j] = 0;
+        }
+    }
+    return z;
 }
 
 module.exports = {
@@ -38,5 +50,6 @@ module.exports = {
     inUnitInterval,
     inNormalUI,
     clampTo,
-    bankRound
+    bankRound,
+    zeros
 }

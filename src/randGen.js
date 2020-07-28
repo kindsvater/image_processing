@@ -57,6 +57,17 @@ function randInt(min, range) {
     return Math.floor(Math.random() * range) + min;
 }
 
+//Generates N-length array of random integers between min and min + range.
+function randIntArray(min, range, n=1) {
+    let ra = [];
+    for (let i = 0; i < n; i++) {
+        ra[i] = randInt(min, range);
+    }
+    return ra;
+}
+
+//Generates random values in the normal distribution from two uniform random numbers from the unit interval.
+//Set xy argument to true to generate two random normal values at once. 
 function BoxMuller(xy=false) {
     let U1 = Math.random(),
         U2 = Math.random(),
@@ -75,6 +86,8 @@ function BoxMuller(xy=false) {
     return x;  
 }
 
+//Uses the boxmuller method to generate random values in a gaussian distribution with specified mean and standard
+//deviation. Set xy argument to true to generate two random gaussians at once. 
 function gaussBoxMuller(mean, stdDev, xy=false) {
     let normRand = BoxMuller(xy);
 
@@ -82,7 +95,7 @@ function gaussBoxMuller(mean, stdDev, xy=false) {
     return normRand * stdDev + mean;
 }
 
-//Generates random gray value from gaussian distribution. Suggested stdDeviations: 16, 32, 64, 84
+//Generates random gray value from gaussian distribution. Suggested stdDeviations: 16, 32, 54
 function gaussGray(res, stdDev, mean=128) {
     let randGray = [],
         p = 0,
@@ -101,9 +114,12 @@ function gaussGray(res, stdDev, mean=128) {
     }
     return randGray;
 }
-// function gauss
+
+
+
 module.exports.rhSquaredProbHist = robinHoodSquaredProbHistogram;
 module.exports.randPHistInt = randProbHistogramInt;
 module.exports.randInt = randInt;
 module.exports.gaussGray = gaussGray;
+module.exports.randIntArray = randIntArray;
 

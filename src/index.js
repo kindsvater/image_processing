@@ -4,6 +4,22 @@ const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
 const { gaussGray } = require('./randGen');
+const { zeros } = require('./valuetype');
+const { randIntArray } = require('./randGen');
+const { extendRealFreqDomain, FFT, inverseFFT } = require('./signal');
+
+function checkFFT() {
+    let r = randIntArray(0, 10, 32);
+    let i = zeros(32);
+    console.log(r);
+    console.log(i);
+    FFT(r, i);
+    console.log(r);
+    console.log(i);
+    inverseFFT(r, i);
+    console.log(r);
+    console.log(i);
+}
 
 let img = new Image();
 let animate = false;
@@ -14,7 +30,7 @@ const gradOffset = 15;
 const timestep = 30;
 img.src = 'img/flowers.jpg';
 img.onload = function() {
-    
+    checkFFT();
     let canvas = document.getElementById("manip");
     let context = canvas.getContext('2d');
     let whratio = this.height / this.width;
