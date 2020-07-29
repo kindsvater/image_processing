@@ -4,22 +4,23 @@ const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
 const { gaussGray } = require('./randGen');
-const { zeros } = require('./valuetype');
+const { zeros, round } = require('./valuetype');
 const { randIntArray } = require('./randGen');
-const { extendRealFreqDomain, FFT, inverseFFT } = require('./signal');
+const { extendRealFreqDomain, FFT, inverseFFT } = require('./fourier');
+const { impulse, psf } = require('./filter');
 
-function checkFFT() {
-    let r = randIntArray(0, 10, 32);
-    let i = zeros(32);
-    console.log(r);
-    console.log(i);
-    FFT(r, i);
-    console.log(r);
-    console.log(i);
-    inverseFFT(r, i);
-    console.log(r);
-    console.log(i);
-}
+// function checkFFT() {
+//     let r = randIntArray(0, 10, 32);
+//     let i = zeros(32);
+//     console.log(r);
+//     console.log(i);
+//     FFT(r, i);
+//     console.log(r);
+//     console.log(i);
+//     inverseFFT(r, i);
+//     console.log(r);
+//     console.log(i);
+// }
 
 let img = new Image();
 let animate = false;
@@ -30,7 +31,8 @@ const gradOffset = 15;
 const timestep = 30;
 img.src = 'img/flowers.jpg';
 img.onload = function() {
-    checkFFT();
+    //checkFFT();
+    console.log(psf.gauss(5, 5, 1));
     let canvas = document.getElementById("manip");
     let context = canvas.getContext('2d');
     let whratio = this.height / this.width;
@@ -44,7 +46,11 @@ img.onload = function() {
     let rawImgData = contextData.data;
     console.log("image pix = " + rawImgData.length);
     console.log(rawImgData)
-    let read = new ImageReader(rawImgData, true);
+    let read = new ImageReader(rawImgData, cwidth, true);
+    console.log(read.getRedChannel());
+    console.log(read.widthRes);
+    console.log(read.heightRes);
+    console.log(read.widthRes * read.heightRes * 4);
     let LI = read.getLightIdxs();
 
     // convertImagetoASCII(rawImgData, cwidth, (textImage) => {
@@ -66,7 +72,7 @@ img.onload = function() {
     //     context.putImageData(contextData, 0, 0); 
     // })
     let grays = gaussGray(rawImgData.length / 8, 32);
-    
+
     let hist = [];
     for (let m = 0; m < 256; m++) {
         hist[m] = 0;

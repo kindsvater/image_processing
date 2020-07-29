@@ -1,12 +1,12 @@
 //Calculates and returns the magnitude (spatial length) of a vector.
-function mag(vector) {
-    let m = 0;
-    for (let i = 0; i < vector.length; i++) {
-        m += vector[i] * vector[i];
-    }
-    return Math.sqrt(m);
-}
-
+const mag = vector => Math.sqrt(vector.reduce((acc, curr) => acc + (curr * curr)));
+//A and B are both N length vectors. Returns the angle in Radians between them.
+const angle = (A, B) => Math.acos(dot(A, B) / (mag(A) * mag(B)));
+//A and B are both vectors of length 3. Returns vector C of length 3 that is orthogonal to A and B.
+const cross = (A, B) => [
+    (A[1] * B[2]) - (A[2] * B[1]),
+    (A[2] * B[0]) - (A[0] * B[2]),
+    (A[0] * B[1]) - (A[1] * B[0])];
 //Calculates and returns the inverse of a square matrix. If matrix is not valid or not square, returns false.
 function invert(square) {
     let sDim = dim(square);
@@ -190,5 +190,7 @@ module.exports = {
     invert,
     multiply,
     dot,
-    mag
+    mag,
+    angle,
+    cross
 }

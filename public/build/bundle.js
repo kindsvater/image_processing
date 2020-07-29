@@ -4,13 +4,23 @@ const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
 
 const ImageReader = (function() {
-    function ImageReader(img, a) {
+    function ImageReader(img, width, a) {
         this.img = img;
         this.colorIdx = 0;
-        this.a = a;
-        //this.pixels = [];
+        this.widthRes = width;
+        this.heightRes = img.length / width / (a ? 4 : 3);
+        this.tupleSize = a ? 4 : 3;
         this.lightVector; //maybe choose object so you can cache different ranges?/
     }
+    ImageReader.prototype.areValidIndices = function(rowI, colI) {
+        if (rowI >= this.heightRes) throw new Error("Row index " + rowI + " is out of bounds.");
+        if (colI >= this.widthRes) throw new Error("Columnindex " + colI + " is our of bound.");
+        return true;
+    }
+    ImageReader.prototype.flatPixelIndex = function(rowI, colI) {
+        areValidIndices(rowI, colI);
+        return (rowI * this.widthRes * this.tupleSize) + (colI * this.tupleSize);
+    } 
     ImageReader.prototype.nextColor = function(a=false) {
         let color;
         if (a) {
@@ -23,7 +33,7 @@ const ImageReader = (function() {
                 this.img[this.colorIdx], this.img[this.colorIdx + 1], this.img[this.colorIdx + 2]
             );
         }
-        this.colorIdx += this.a ? 4 : 3;
+        this.colorIdx += this.tupleSize;
         return color;
     } 
     ImageReader.prototype.eachColor = function(cb, a=false) {
@@ -49,7 +59,7 @@ const ImageReader = (function() {
     }
     ImageReader.prototype.toLightness = function(range=255) {
         //if (this.lightVector) ) Cache and also check range;
-        let LVector = []
+        let LVector = [];
         this.eachColor((color) => {
             LVector.push(
                 Math.round(
@@ -67,12 +77,62 @@ const ImageReader = (function() {
             if (!lightIdxs[lVec[m]]) {
                 lightIdxs[lVec[m]] = [];
             }
-            lightIdxs[lVec[m]].push(m * this.a ? 4 : 3);
+            lightIdxs[lVec[m]].push(m * this.tupleSize);
         }
         return lightIdxs;
     }
     ImageReader.prototype.reset = function() {
         this.colorIdx = 0;
+    }
+    ImageReader.prototype.redChannelAt = function(rowI, colI) {
+        return this.img[this.flatPixelIndex(rowI, colI)];
+    }
+    ImageReader.prototype.greenChannelAt = function(rowI, colI) {
+        return this.img[this.flatPixelIndex(rowI, colI) + 1];
+    }
+    ImageReader.prototype.blueChannelAt = function(rowI, colI) {
+        return this.img[this.flatPixelIndex(rowI, colI) + 2];
+    }
+    ImageReader.prototype.pixelAt = function(rowI, colI) {
+        let pixelI = this.flatPixelIndex(rowI, colI);
+        return RGB.color(this.img[pixelI], this.img[pixelI + 1], this.img[pixelI + 2]);
+    }
+    function getChannel(img, heightRes, widthRes, channel, tupleSize) {
+        return function(flat=true) {
+            let cc = [];
+            let flatIndex = 0;
+            if (flat) {
+                let pi = 0;
+                for (flatIndex = 0; flatIndex < img.length; flatIndex += tupleSize) {
+                    cc[pi] = img[flatIndex + channel];
+                    pi++
+                }
+            } else {
+                for (let r = 0; r < heightRes; r++) {
+                    cc[r] = [];
+                    for (let c = 0; c < widthRes; c++) {
+                        cc[r][c] = img[flatIndex + channel];
+                        flatIndex += tupleSize;
+                    }
+                }
+            }
+            return cc;
+        }
+    } 
+    ImageReader.prototype.getRedChannel = function(flat) {
+        return getChannel(this.img, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
+    }
+    ImageReader.prototype.getGreenChannel = function(flat) {
+        return getChannel(this.img, this.heightRes, this.widthRes, 1, this.tupleSize)(flat);
+    }
+    ImageReader.prototype.getBlueChannel = function(flat) {
+        return getChannel(this.img, this.heightRes, this.widthRes, 2, this.tupleSize)(flat);
+    }
+    ImageReader.prototype.getAlphaChannel = function(flat) {
+        if (this.tupleSize !== 4) {
+            return null;
+        }
+        return getChannel(this.img, this.heightRes, this.widthRes, 3, this.tupleSize)(flat);     
     }
     return ImageReader;
 })();
@@ -80,7 +140,7 @@ const ImageReader = (function() {
 module.exports = {
     ImageReader
 }
-},{"./cie":3,"./rgb":8,"./srgb":11}],2:[function(require,module,exports){
+},{"./cie":3,"./rgb":10,"./srgb":12}],2:[function(require,module,exports){
 const { invert, dot } = require('./lin.js');
 
 const redLevel = (rgbColor) => rgbColor[0];
@@ -126,7 +186,7 @@ function rgbWhiteToXYZ(whiteCoords) {
 rgb.createRGBRelativeLuminance = (XYZconversionMatrix) =>
     rgb => dot([redLevel(rgb), greenLevel(rgb), blueLevel(rgb)], XYZconversionMatrix[1]);
 
-},{"./lin.js":6}],3:[function(require,module,exports){
+},{"./lin.js":8}],3:[function(require,module,exports){
 const { inNormalUI, clampTo } =  require('./valuetype.js');
 
 //Device Invariant Representation of Color. The tristimulus values X, Y, and Z technically
@@ -281,7 +341,279 @@ module.exports = {
     XYZ,
 }
 
-},{"./valuetype.js":12}],4:[function(require,module,exports){
+},{"./valuetype.js":13}],4:[function(require,module,exports){
+const { zeros, initialize, round } = require("./valuetype");
+
+const impulse = {
+    "delta" : (n=16, shift=0, scale=1) => { 
+        let d = zeros(n);
+        d[shift] = scale;
+        return d;
+    },
+    "step" : n => initialize(n, 1),
+    "movingAverage" : n => initialize(n, 1 / n),
+    "gauss" : (n, scale) => {
+        let ir = [],
+            x;
+        for (let i = 0; i < n; i++) {
+            x = Math.ceil(i - (n / 2));
+            ir[i] = (1 / Math.sqrt(2 * Math.PI * scale)) * Math.exp(-((x * x) / (2 * scale * scale)));
+        }
+        return ir;
+    }
+}
+function edgeEnhance(k) { return [[-k/8,-k/8,-k/8], [-k/8,k+1,-k/8], [-k/8,-k/8,-k/8]] }
+const psf = {
+    "box" : (rows, cols) => initialize(1, rows, cols),
+    "delta" : edgeEnhance(0),
+    "shiftSubtract" : [[0,0,0],[0,1,0],[0,0,-1]],
+    "edgeDetect" : edgeEnhance(1),
+    "edgeEnhance" : edgeEnhance,
+    "gauss" : (m, n, scale) => {
+        let psf = [],
+        x,
+        y;
+        for (let r = 0; r < m; r++) {
+            psf[r] = [];
+            y = Math.ceil(r - (m / 2)); 
+            for (let c = 0; c < n; c++) {
+                x = Math.ceil(c - (n / 2));
+                psf[r][c] = round((1 / (2 * Math.PI * scale * scale)) * Math.exp(-((x * x) + (y * y)) / (2 * scale * scale)), 4);
+            }
+        }
+        return psf;
+    }
+}
+
+// function makeFilter(freqResp, filterSize) {
+//     let ReX = freqResp
+//     let ftSize = 1024;
+
+//     let ReX = [],
+//         T = [];
+
+//     //load frequency response
+//     for (let i = 0; i < ftSize / 2 + 1; i++) {
+//         if (i >= freqResp.length) {
+//             ReX[i] = 0;
+//         } else {
+//             ReX[i] = freqResp[i];
+//         }
+//     }
+
+//     //Shift signal filterSize / 2 points to the right
+//     for (let i = 0; i < ftSize; i++) {
+//         let ind = i + filterSize;
+//         if (ind >= ftSize) {
+//             ind = ind - ftSize;
+//         }
+//         T[ind] = ReX[i];
+//     }
+
+//     //Truncate and Window the Signal
+//     for (let k = 0; k < filterSize; k++) {
+//         if (k <= filterSize) ReX[k] *= (0.54 - 0.46 * Math.cos(2 * Math.PI * k / filterSize));
+//         if (k > filterSize) ReX[k] = 0;
+//     }
+
+//     return ReX.slice(0, filterSize + 1);
+// }
+
+module.exports = {
+    impulse,
+    psf
+}
+},{"./valuetype":13}],5:[function(require,module,exports){
+const { bankRound, zeros } = require('./valuetype');
+
+//Given one N-point time domain signal, the Discrete Fourier Transform decomposesas the signal into
+//two N/2-point frequency domain signals ReX and ImX. These are returned as key-value pairs of an object.
+//The values of ReX and ImX are scalars that scale a sinusoid function (Cosine for ReX and Sine for ImX)
+//whose frequency, relative to the original signal, is the domain value of the frequency signal.
+function realDFT(sig) {
+    if  (sig.length % 2 !== 0) throw new Error("Length of signal must be even");
+    let ReX = [],
+        ImX = [],
+        i,
+        j;
+    
+    for (i = 0; i < sig.length / 2; i++) {
+        ReX[i] = 0;
+        ImX[i] = 0;
+    }
+    
+    for (i = 0; i < sig.length / 2; i++) {
+        for (j = 0; j < sig.length; j++) {
+            ReX[i] += sig[j] * Math.cos(2 * Math.PI * i * j / sig.length);
+            ImX[i] -= sig[j] * Math.sin(2 * Math.PI * i * j / sig.length);
+        }
+    }
+
+    return { ReX, ImX }
+}
+//From two N / 2 + 1 sized vectors of real and imaginary components. Synthesizes N point signal.
+function inverseRealDFT(ReX, ImX) {
+    if (ReX.length !== ImX.length) throw new Error("Real and Imaginary vectors must be the same length");
+    let X = [],
+        cosX = [],
+        sinX = [],
+        n = ReX.length + ImX.length - 2;
+        i,
+        j;
+
+    for (i = 0; i < (n / 2) + 1; i++) {
+        cosX[i] = ReX[i] / (n / 2); //convert real signal to cos amplitude scalars
+        sinX[i] = - ImX[i] / (n / 2); //convert imaginary signal to sin amplitude scalars
+    }
+    cosX[0] = ReX[0] / n;
+    cosX[ReX.length - 1] = ReX[ReX.length - 1] / n;
+
+    for (i = 0; i < n; i++) {
+        X[i] = 0; //Initialize time-domain signal 
+        //Sum scaled basis functions for each frequency
+        for (j = 0; j < (n / 2) + 1; j++) {
+            X[i] = X[i] + cosX[j] * Math.cos(2 * Math.PI * j * i / n);
+            X[i] = X[i] + sinX[j] * Math.sin(2 * Math.PI * j * i / n);
+        }
+    }
+    return X;
+}
+
+//Fast Fourier Transform of a Complex Signal in the time domain. 
+function FFT(ReX, ImX) {
+    //TODO: make compatible with signal with length not a power of 2.
+    // let power = Math.log2(complexSig.length)
+    // if (!Number.isInteger(power)) {
+    //     // let n = Math.pow(2, Math.ceil(power));
+    //     // for (i = complexSig.)
+    //     //We could zero pad the signal to next power of two, 
+    //     //Or perform the Chirp Z-Transform
+    let tempR,
+        tempI,
+        m = bankRound(Math.log2(ReX.length)),
+        j = ReX.length / 2;
+
+    //Sort in Reverse Bit order
+    for (let i = 1; i < ReX.length; i++) {
+        if (i < j) {
+            tempR = ReX[j];
+            tempI = ImX[j];
+            ReX[j] = ReX[i];
+            ImX[j] = ImX[i];
+            ReX[i] = tempR;
+            ImX[i] = tempI;
+        }
+        let k = ReX.length / 2;
+        while (k <= j) {
+            j = j - k;
+            k = k / 2;
+        }
+        j = j + k;
+    }
+    let g = 0;
+    //Loop for each stage
+    for (let stage = 1; stage <= m; stage++) {  
+        let spectraSize = Math.pow(2, stage);      
+        let spectraSize2 = spectraSize / 2;
+        let ur = 1;
+        let ui = 0;
+        //calculate sine and cosine values
+        let sr = Math.cos(Math.PI / spectraSize2);
+        let si = Math.sin(Math.PI / spectraSize2);
+
+        //Loop for each Sub-DTF
+        for (j = 1; j <= spectraSize2; j++) {
+            //Loop for each Butterfly
+            for(let i = j - 1; i < ReX.length; i += spectraSize) {
+                let ip = i + spectraSize2;
+                //Butterfly calculation
+                tempR = ReX[ip] * ur - ImX[ip] * ui;
+                tempI = ReX[ip] * ui + ImX[ip] * ur;
+                ReX[ip] = ReX[i] - tempR;
+                ImX[ip] = ImX[i] - tempI;
+                ReX[i] = ReX[i] + tempR;
+                ImX[i] = ImX[i] + tempI;
+            }
+            tempR = ur;
+            ur = tempR * sr - ui * si;
+            ui = tempR * si + ui * sr;
+        }
+    }
+    return {ReX, ImX};
+}
+
+//Transforms complex signal in frequency domain to complex signal in the time domain
+function inverseFFT(ReX, ImX) {
+    for (let k = 0; k < ReX.length; k++) {
+        ImX[k] *= -1;
+    }
+
+    FFT(ReX, ImX);
+
+    for (let i = 0; i < ReX.length; i++) {
+        ReX[i] = ReX[i] / ReX.length;
+        ImX[i] = -1 * ImX[i] / ReX.length;
+    }
+
+    return { ReX, ImX };
+}
+
+//From N-point time-domain signal, calculate the Real Frequency Spectrum using the 
+//Fast Fourier Transform. The real spectrum is composed of ReX and ImX, which are both 
+//N / 2 + 1 length signals.
+function RDFTFromFFT(signal, real=false) {
+    let ReX = signal.slice(0), //Initialize Real part of signal
+        ImX = zeros(signal.length); //Initialize Imaginary part of signal
+    FFT(ReX, ImX); //Take Fast Fourier Transform
+    //Return Real DFT spectrum
+    if (real) {
+        return { 
+            "ReX" : ReX.slice(0, signal.length / 2 + 1),
+            "ImX" : ReX.slice(0, signal.length / 2 + 1)
+        }
+    }
+    return { ReX, ImX };
+}
+
+//For 2-Dimensional spatial domain signal. Returns complex 2D signal in frequency domain. 
+function FFT2D(signal) {
+    let ReImg = [],
+        ImImg = [],
+        freq;
+    //Take FFT of rows and store in real and imaginary images.
+    for (let row = 0; row < signal.length; row++) {
+        freq = RDFTFromFFT(signal[row]);
+        ReImg[row] = freq.ReX;
+        ImImg[row] = freq.ImX;
+    }
+    let ReColFreqs,
+        ImColFreqs;
+    //Take FFT of each column
+    for (let col = 0; col < signal[0].length; col++) {
+        ReColFreqs = [];
+        ImColFreqs = [];
+        for (let row = 0; row < signal.length; row++) {
+            ReColFreqs[row] = ReImg[row][col];
+            ImColFreqs[row] = ImImg[row][col];
+        }
+        FFT(ReColFreqs, ImColFreqs);
+        //Store Results back in column
+        for (let row = 0; row < signal.length; row++) {
+            ReImg[row][col] = ReColFreqs[row];
+            ImImg[row][col] = ImColFreqs[row];
+        }
+    }
+    return {ReImg, ImImg};
+}
+
+module.exports = {
+    realDFT,
+    inverseRealDFT,
+    FFT2D,
+    FFT,
+    inverseFFT,
+}
+},{"./valuetype":13}],6:[function(require,module,exports){
 const { RGB, RGBA } = require('./RGB');
 const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./sRGB');
 const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie');
@@ -397,29 +729,30 @@ module.exports = {
     equalizeHist,
     equalizeImgLight
 }
-},{"./ImageReader.js":1,"./RGB":2,"./cie":3,"./sRGB":9}],5:[function(require,module,exports){
+},{"./ImageReader.js":1,"./RGB":2,"./cie":3,"./sRGB":11}],7:[function(require,module,exports){
 const { ImageReader } = require('./ImageReader.js');
 const { histogram, cdf, equalizeImgLight } = require('./imgProcessing');
 const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
 const { gaussGray } = require('./randGen');
-const { zeros } = require('./valuetype');
+const { zeros, round } = require('./valuetype');
 const { randIntArray } = require('./randGen');
-const { extendRealFreqDomain, FFT, inverseFFT } = require('./signal');
+const { extendRealFreqDomain, FFT, inverseFFT } = require('./fourier');
+const { impulse, psf } = require('./filter');
 
-function checkFFT() {
-    let r = randIntArray(0, 10, 32);
-    let i = zeros(32);
-    console.log(r);
-    console.log(i);
-    FFT(r, i);
-    console.log(r);
-    console.log(i);
-    inverseFFT(r, i);
-    console.log(r);
-    console.log(i);
-}
+// function checkFFT() {
+//     let r = randIntArray(0, 10, 32);
+//     let i = zeros(32);
+//     console.log(r);
+//     console.log(i);
+//     FFT(r, i);
+//     console.log(r);
+//     console.log(i);
+//     inverseFFT(r, i);
+//     console.log(r);
+//     console.log(i);
+// }
 
 let img = new Image();
 let animate = false;
@@ -430,7 +763,8 @@ const gradOffset = 15;
 const timestep = 30;
 img.src = 'img/flowers.jpg';
 img.onload = function() {
-    checkFFT();
+    //checkFFT();
+    console.log(psf.gauss(5, 5, 1));
     let canvas = document.getElementById("manip");
     let context = canvas.getContext('2d');
     let whratio = this.height / this.width;
@@ -444,7 +778,11 @@ img.onload = function() {
     let rawImgData = contextData.data;
     console.log("image pix = " + rawImgData.length);
     console.log(rawImgData)
-    let read = new ImageReader(rawImgData, true);
+    let read = new ImageReader(rawImgData, cwidth, true);
+    console.log(read.getRedChannel());
+    console.log(read.widthRes);
+    console.log(read.heightRes);
+    console.log(read.widthRes * read.heightRes * 4);
     let LI = read.getLightIdxs();
 
     // convertImagetoASCII(rawImgData, cwidth, (textImage) => {
@@ -466,7 +804,7 @@ img.onload = function() {
     //     context.putImageData(contextData, 0, 0); 
     // })
     let grays = gaussGray(rawImgData.length / 8, 32);
-    
+
     let hist = [];
     for (let m = 0; m < 256; m++) {
         hist[m] = 0;
@@ -748,16 +1086,16 @@ function displayHistogram(selector, data, color, height, width) {
     svg.append("g").call(yAxis);
 }
 
-},{"./ImageReader.js":1,"./cie":3,"./imgProcessing":4,"./randGen":7,"./rgb":8,"./signal":10,"./srgb":11,"./valuetype":12}],6:[function(require,module,exports){
+},{"./ImageReader.js":1,"./cie":3,"./filter":4,"./fourier":5,"./imgProcessing":6,"./randGen":9,"./rgb":10,"./srgb":12,"./valuetype":13}],8:[function(require,module,exports){
 //Calculates and returns the magnitude (spatial length) of a vector.
-function mag(vector) {
-    let m = 0;
-    for (let i = 0; i < vector.length; i++) {
-        m += vector[i] * vector[i];
-    }
-    return Math.sqrt(m);
-}
-
+const mag = vector => Math.sqrt(vector.reduce((acc, curr) => acc + (curr * curr)));
+//A and B are both N length vectors. Returns the angle in Radians between them.
+const angle = (A, B) => Math.acos(dot(A, B) / (mag(A) * mag(B)));
+//A and B are both vectors of length 3. Returns vector C of length 3 that is orthogonal to A and B.
+const cross = (A, B) => [
+    (A[1] * B[2]) - (A[2] * B[1]),
+    (A[2] * B[0]) - (A[0] * B[2]),
+    (A[0] * B[1]) - (A[1] * B[0])];
 //Calculates and returns the inverse of a square matrix. If matrix is not valid or not square, returns false.
 function invert(square) {
     let sDim = dim(square);
@@ -941,9 +1279,11 @@ module.exports = {
     invert,
     multiply,
     dot,
-    mag
+    mag,
+    angle,
+    cross
 }
-},{}],7:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 const { clampTo } = require('./valuetype.js');
 //Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
 //probabilities of two outcomes. Probability in excess of a is distributed evenly 
@@ -1070,7 +1410,7 @@ module.exports.gaussGray = gaussGray;
 module.exports.randIntArray = randIntArray;
 
 
-},{"./valuetype.js":12}],8:[function(require,module,exports){
+},{"./valuetype.js":13}],10:[function(require,module,exports){
 const { invert, dot } = require('./lin.js');
 const redLevel = (rgbColor) => rgbColor[0];
 const greenLevel = (rgbColor) => rgbColor[1];
@@ -1112,7 +1452,7 @@ function rgbWhiteToXYZ(whiteCoords) {
 rgb.createRGBRelativeLuminance = (XYZconversionMatrix) =>
     rgb => dot([redLevel(rgb), greenLevel(rgb), blueLevel(rgb)], XYZconversionMatrix[1]);
 
-},{"./lin.js":6}],9:[function(require,module,exports){
+},{"./lin.js":8}],11:[function(require,module,exports){
 const { is8BitInt, inUnitInterval } = require('./valuetype.js');
 const { multiply } = require('./lin.js');
 const { createRGBRelativeLuminance } = require('./rgb.js');
@@ -1251,218 +1591,7 @@ module.exports = {
     XYZtosRGB
 }
 
-},{"./lin.js":6,"./rgb.js":8,"./valuetype.js":12}],10:[function(require,module,exports){
-'use strict';
-const { bankRound } = require('./valuetype');
-//Convolve n-sample time-domain signal with m-sample impulse response. Output sample calculations
-//are distributed across multiple input samples.
-function convolveInput(sig, ir) {
-    let Y = [],
-        i,
-        j;
-
-    for (i = 0; i < sig.length + ir.length; i++) {
-        Y[i] = 0;
-    }
-
-    for (i = 0; i < sig.length; i++) {
-        for (j = 0; j < ir.length; j++) {
-            Y[i + j] = Y[i + j] + (sig[i] * ir[j]);
-        }
-    }
-    return Y;  
-}
-
-//Convolve n-sample time-domain signal with m-sample impulse response. Output sample calculations
-//are performed independently of one another. 
-function convolveOutput(sig, ir) {
-    let Y = [],
-        i,
-        j;
-
-    for (i = 0; i < sig.length + ir.length; i++) {
-        Y[i] = 0
-        for (j = 0; j < ir.length; j++) {
-            if (i - j < 0) continue;
-            if (i - j > sig.length) continue;
-            Y[i] = Y[i] + (ir[j] * sig[i - j]);
-        }
-    }
-    return Y.slice(0, sig.length);
-}
-
-//Given two time-domain signals, returns a third signal, the cross-correlation. The cross-correlation
-//signal's amplitude is a measure of the resemblance of the target signal to the received signal at 
-//a time-point x.
-function correlate(receivedSig, targetSig) {
-    let preFlip = targetSig.reverse();
-    return convolveOutput(receivedSig, preFlip);
-}
-
-//Given one N-point time domain signal, the Discrete Fourier Transform decomposesas the signal into
-//two N/2-point frequency domain signals ReX and ImX. These are returned as key-value pairs of an object.
-//The values of ReX and ImX are scalars that scale a sinusoid function (Cosine for ReX and Sine for ImX)
-//whose frequency, relative to the original signal, is the domain value of the frequency signal.
-function realDFT(sig) {
-    if  (sig.length % 2 !== 0) throw new Error("Length of signal must be even");
-    let ReX = [],
-        ImX = [],
-        i,
-        j;
-    
-    for (i = 0; i < sig.length / 2; i++) {
-        ReX[i] = 0;
-        ImX[i] = 0;
-    }
-    
-    for (i = 0; i < sig.length / 2; i++) {
-        for (j = 0; j < sig.length; j++) {
-            ReX[i] += sig[j] * Math.cos(2 * Math.PI * i * j / sig.length);
-            ImX[i] -= sig[j] * Math.sin(2 * Math.PI * i * j / sig.length);
-        }
-    }
-
-    return { ReX, ImX }
-}
-
-//From two N / 2 + 1 sized vectors of real and imaginary components. Synthesizes N point signal.
-function inverseDFT(ReX, ImX) {
-    if (ReX.length !== ImX.length) throw new Error("Real and Imaginary vectors must be the same length");
-    let X = [],
-        cosX = [],
-        sinX = [],
-        n = ReX.length + ImX.length - 2;
-        i,
-        j;
-
-    for (i = 0; i < (n / 2) + 1; i++) {
-        cosX[i] = ReX[i] / (n / 2); //convert real signal to cos amplitude scalars
-        sinX[i] = - ImX[i] / (n / 2); //convert imaginary signal to sin amplitude scalars
-    }
-    cosX[0] = ReX[0] / n;
-    cosX[ReX.length - 1] = ReX[ReX.length - 1] / n;
-
-    for (i = 0; i < n; i++) {
-        X[i] = 0; //Initialize time-domain signal 
-        //Sum scaled basis functions for each frequency
-        for (j = 0; j < (n / 2) + 1; j++) {
-            X[i] = X[i] + cosX[j] * Math.cos(2 * Math.PI * j * i / n);
-            X[i] = X[i] + sinX[j] * Math.sin(2 * Math.PI * j * i / n);
-        }
-    }
-    return X;
-}
-
-//Extend the real frequency domain from N / 2 + 1 to N. Used when desirable to use the inverse FFT but only have
-//real frequency signals for ReX and ImX.
-function extendRealFreqDomain(ReX, ImX) {
-    let exRe = ReX.slice(0),
-        exIm = ImX.slice(0),
-        n = (ReX.length - 1) * 2;
-
-    for (let i = (n / 2) + 1; i < n; i++) {
-        exRe[i] = ReX[n - i];
-        exIm[i] = -1 * ImX[n - i];
-    }
-    return [exRe, exIm];
-}
-
-function bitReversalSort(seq) {
-    if (!Number.isInteger(Math.log2(seq.length))) throw new Error(
-        "Bit reversal sorting can only be performed on a collection with a length of a power of 2"); 
-
-    return seq;
-}
-
-function FFT(ReX, ImX) {
-    // let power = Math.log2(complexSig.length)
-    // if (!Number.isInteger(power)) {
-    //     // let n = Math.pow(2, Math.ceil(power));
-    //     // for (i = complexSig.)
-    //     //We could zero pad the signal to next power of two, 
-    //     //Or perform the Chirp Z-Transform
-    // } else {
-
-    // }
-    let tempR,
-        tempI,
-        m = bankRound(Math.log2(ReX.length)),
-        j = ReX.length / 2;
-
-    //Sort in Reverse Bit order
-    for (let i = 1; i < ReX.length; i++) {
-        if (i < j) {
-            tempR = ReX[j];
-            tempI = ImX[j];
-            ReX[j] = ReX[i];
-            ImX[j] = ImX[i];
-            ReX[i] = tempR;
-            ImX[i] = tempI;
-        }
-        let k = ReX.length / 2;
-        while (k <= j) {
-            j = j - k;
-            k = k / 2;
-        }
-        j = j + k;
-    }
-    let g = 0;
-    //Loop for each stage
-    for (let stage = 1; stage <= m; stage++) {  
-        let spectraSize = Math.pow(2, stage);      
-        let spectraSize2 = spectraSize / 2;
-        let ur = 1;
-        let ui = 0;
-        //calculate sine and cosine values
-        let sr = Math.cos(Math.PI / spectraSize2);
-        let si = Math.sin(Math.PI / spectraSize2);
-
-        //Loop for each sub-DTF
-        for (j = 1; j <= spectraSize2; j++) {
-            //Loop for each Butterfly
-            for(let i = j - 1; i < ReX.length; i += spectraSize) {
-                let ip = i + spectraSize2;
-                //Butterfly calculation
-                tempR = ReX[ip] * ur - ImX[ip] * ui;
-                tempI = ReX[ip] * ui + ImX[ip] * ur;
-                ReX[ip] = ReX[i] - tempR;
-                ImX[ip] = ImX[i] - tempI;
-                ReX[i] = ReX[i] + tempR;
-                ImX[i] = ImX[i] + tempI;
-            }
-            tempR = ur;
-            ur = tempR * sr - ui * si;
-            ui = tempR * si + ui * sr;
-        }
-    }
-    return {ReX, ImX};
-}
-
-function inverseFFT(ReX, ImX) {
-    for (let k = 0; k < ReX.length; k++) {
-        ImX[k] *= -1;
-    }
-
-    FFT(ReX, ImX);
-
-    for (let i = 0; i < ReX.length; i++) {
-        ReX[i] = ReX[i] / ReX.length;
-        ImX[i] = -1 * ImX[i] / ReX.length;
-    }
-
-    return {ReX, ImX};
-}
-
-module.exports = {
-    "convolve" : convolveOutput,
-    realDFT,
-    inverseDFT,
-    correlate,
-    FFT,
-    inverseFFT,
-    extendRealFreqDomain
-}
-},{"./valuetype":12}],11:[function(require,module,exports){
+},{"./lin.js":8,"./rgb.js":10,"./valuetype.js":13}],12:[function(require,module,exports){
 const { is8BitInt, inUnitInterval } = require('./valuetype.js');
 const { multiply } = require('./lin.js');
 const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
@@ -1608,7 +1737,7 @@ module.exports = {
     gray
 }
 
-},{"./lin.js":6,"./rgb.js":8,"./valuetype.js":12}],12:[function(require,module,exports){
+},{"./lin.js":8,"./rgb.js":10,"./valuetype.js":13}],13:[function(require,module,exports){
 function is8BitInt(value) {
     return (!isNaN(channelValue)
         && Number.isInteger(+channelValue)
@@ -1644,24 +1773,38 @@ function bankRound(num, decimalPlaces=0) {
     return decimalPlaces ? r / m : r;
 }
 
-function zeros(n, m=0) {
+function initialize(value, n, m=0) {
     let z = [];
     for (let i = 0; i < n; i++) {
-        if (m > 0) z[i] = [];
-        else z[i] = 0;
-        for (let j = 0; j < m; j++) {
-            z[i][j] = 0;
-        }
+        if (m > 0) { 
+            z[i] = [];
+        } else {
+            z[i] = 0;
+            for (let j = 0; j < m; j++) {
+                z[i][j] = 0;
+            }
+        } 
     }
     return z;
 }
 
+function zeros(n, m=0) {
+    return initialize(0, n, m);
+}
+
+function round(n, digits=0) {
+    var multiplicator = Math.pow(10, digits);
+    n = parseFloat((n * multiplicator).toFixed(11));
+    return Math.round(n) / multiplicator;
+}
 module.exports = {
     is8BitInt,
     inUnitInterval,
     inNormalUI,
     clampTo,
     bankRound,
-    zeros
+    zeros,
+    initialize,
+    round
 }
-},{}]},{},[5]);
+},{}]},{},[7]);

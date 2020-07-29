@@ -1,5 +1,66 @@
 'use strict';
-const { bankRound } = require('./valuetype');
+const { dim } = require('./lin');
+const { zeros } = require('./valuetype');
+const { inverseFFT, RDFTFromFFT } = require('./fourier');
+
+
+const displayRefA = 1;
+const audioRefA = 0.00001;
+const dBFromAmp = (sigA, refA) => 20 * Math.log10(sigA / refA);
+const dBFromPow = (sigP, refP) => 10 * Math.log10(sigP / refP);
+//Extend the real frequency domain from N / 2 + 1 to N. 
+//Useful when you want to calculate the Inverse Fast Fourier Transform 
+//but your frequency signals ReX and ImX only cover the real domain. 
+function extendRealFreqDomain(ReX, ImX) {
+    //TODO: rewrite inplace
+    let exRe = ReX.slice(0),
+        exIm = ImX.slice(0),
+        n = (ReX.length - 1) * 2;
+
+    for (let i = (n / 2) + 1; i < n; i++) {
+        exRe[i] = ReX[n - i];
+        exIm[i] = -1 * ImX[n - i];
+    }
+    return [exRe, exIm];
+}
+
+//Multiply two N length complex signals in the frequency domain, X and H, by one another. 
+function freqMultiply(ReX, ImX, ReH, ImH, min=0, max=0, inPlace=false) {
+    if (!max) max = ReX.length;
+    let ReY = inPlace ? ReX : [];
+        ImY = inPlace ? ImX : [];
+
+    if (inPlace) {
+        let temp;
+        for (let i = min; i < max; i++) {
+            temp = ReX[i] * ReH[i] - ImX[i] * ImH[i]; 
+            ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+            ReY[i] = temp;
+        }
+    } else {
+        for (let i = min; i < max; i++) {
+            ReY[i] = ReX[i] * ReH[i] - ImX[i] * ImH[i];
+            ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+        }
+    }
+    return { "ReX" : ReY, "ImX" : ImY }
+}
+
+//Divide two n length complex signals in the frequency domain, X / Y.
+function freqDivision(ReX, ImX, ReY, ImY) {
+    //TODO: rewrite for in-place computation
+    let ReH = [],
+        ImH = [];
+    
+    for (let i = 0; i < ReX.length; i++) {
+        ReH[i] = (ReY[i] * ReX[i] + ImY[i] * ImX[i])
+            / (ReX[i] * ReX[i] + ImX[i] * ImX[i]);
+        ImH[i] = (ImY[i] * ReX[i] - ReY[i] * ImX[i])
+            / (ReX[i] * ReX[i] + ImX[i] * ImX[i]);
+    }
+    return { "ReX" : ReH, "ReY" : ImH }
+}
+
 //Convolve n-sample time-domain signal with m-sample impulse response. Output sample calculations
 //are distributed across multiple input samples.
 function convolveInput(sig, ir) {
@@ -45,164 +106,104 @@ function correlate(receivedSig, targetSig) {
     return convolveOutput(receivedSig, preFlip);
 }
 
-//Given one N-point time domain signal, the Discrete Fourier Transform decomposesas the signal into
-//two N/2-point frequency domain signals ReX and ImX. These are returned as key-value pairs of an object.
-//The values of ReX and ImX are scalars that scale a sinusoid function (Cosine for ReX and Sine for ImX)
-//whose frequency, relative to the original signal, is the domain value of the frequency signal.
-function realDFT(sig) {
-    if  (sig.length % 2 !== 0) throw new Error("Length of signal must be even");
-    let ReX = [],
-        ImX = [],
-        i,
-        j;
+
+function convolveFFT(signal, ir, fftSize) {
+    let output = [];
+    let segSize = fftSize + 1 - ir.length,
+        segCount = Math.ceil(signal.length  / segSize),
+        overlapSize = fftSize - segSize;
     
-    for (i = 0; i < sig.length / 2; i++) {
-        ReX[i] = 0;
-        ImX[i] = 0;
+    //load filter impulse response
+    let XX = zeros(fftSize);
+    for (let i = 0; i < ir.length; i++) {
+        XX[i] = ir[i];
     }
+    //Get Real DFT of the filter's impulse response
+    let { ReX, ImX } = RDFTFromFFT(XX);
+    let ReFR = ReX.slice(0),
+        ImFR = ImX.slice(0),
+        overlap = zeros(overlapSize);
     
-    for (i = 0; i < sig.length / 2; i++) {
-        for (j = 0; j < sig.length; j++) {
-            ReX[i] += sig[j] * Math.cos(2 * Math.PI * i * j / sig.length);
-            ImX[i] -= sig[j] * Math.sin(2 * Math.PI * i * j / sig.length);
+    for (let seg = 0; seg < segCount; seg++) {
+        //Initialize XX with the segment
+        for (let i = 0; i < segSize; i++) {   
+            //If the segment is out of range of the original signal, pad with zeros  
+            XX[i] = ((seg * segSize) + i) >= signal.length ? 0 : signal[(seg * segSize) + i];
         }
-    }
-
-    return { ReX, ImX }
-}
-
-//From two N / 2 + 1 sized vectors of real and imaginary components. Synthesizes N point signal.
-function inverseDFT(ReX, ImX) {
-    if (ReX.length !== ImX.length) throw new Error("Real and Imaginary vectors must be the same length");
-    let X = [],
-        cosX = [],
-        sinX = [],
-        n = ReX.length + ImX.length - 2;
-        i,
-        j;
-
-    for (i = 0; i < (n / 2) + 1; i++) {
-        cosX[i] = ReX[i] / (n / 2); //convert real signal to cos amplitude scalars
-        sinX[i] = - ImX[i] / (n / 2); //convert imaginary signal to sin amplitude scalars
-    }
-    cosX[0] = ReX[0] / n;
-    cosX[ReX.length - 1] = ReX[ReX.length - 1] / n;
-
-    for (i = 0; i < n; i++) {
-        X[i] = 0; //Initialize time-domain signal 
-        //Sum scaled basis functions for each frequency
-        for (j = 0; j < (n / 2) + 1; j++) {
-            X[i] = X[i] + cosX[j] * Math.cos(2 * Math.PI * j * i / n);
-            X[i] = X[i] + sinX[j] * Math.sin(2 * Math.PI * j * i / n);
+        for (let j = segSize; j < fftSize; j++) {
+            XX[j] = 0;
         }
+        loadSegment(signal.slice(seg * segSize, (seg + 1) * segSize), XX);
+        //Analyze frequency of segment
+        ({ ReX, ImX } = RDFTFromFFT(XX, true)); 
+        //Multiply segment freq signal by kernel freq signal
+        ({ ReX, ImX } = freqMultiply(ReX, ImX, ReFR, ImFR, 0, fftSize / 2 + 1));
+        //Extend Real and Imaginary signal from N / 2 + 1 to N
+        ({ ReX, ImX } = extendRealFreqDomain(ReX, ImX));
+        //Take the inverse FFT of the now convolved segment
+        XX = inverseFFT(ReX, ImX)["ReX"];
+        //Add the prior segment's overlap to this segment
+        for (let i = 0; i < overlap.length; i++) {
+            XX[i] = XX[i] + overlap[i];
+        }
+        //Save the samples that will overlap with the next segment
+        for (let i = segSize; i < fftSize; i++) {
+            overlap[i - segSize] = XX[i];
+        }
+        //concatenate convolved segment to output
+        output.push(...XX.slice(0, segSize));
     }
-    return X;
+    //Concatenate remaining overlap to output
+    output.push(...overlap);
+    return output;
 }
 
-//Extend the real frequency domain from N / 2 + 1 to N. Used when desirable to use the inverse FFT but only have
-//real frequency signals for ReX and ImX.
-function extendRealFreqDomain(ReX, ImX) {
-    let exRe = ReX.slice(0),
-        exIm = ImX.slice(0),
-        n = (ReX.length - 1) * 2;
+// //If provided point spread function is separable (psf(xy) = h(x)v(y)) 
+// //Separate into horizontal and vertical projections and return.
+// //If not separable, return null;
+// function separate(psf) {
+//     let {rows, cols} = dim(psf);
+//     let h = psf[0];
+//     let v = [1];
+//     for (let i = 1; i < rows; i++) {
+//         let c = psf[i][0] / h[0];
+//         for (let j = 1; j < cols; j++) {
+//             if (c !== psf[i][j]) {
+//                 //what is my rounding error...
+//                 return false;
+//             }
+//         }
+//         v[i] = c;
+//     }
+//     return {h, v};
+// }
 
-    for (let i = (n / 2) + 1; i < n; i++) {
-        exRe[i] = ReX[n - i];
-        exIm[i] = -1 * ImX[n - i];
-    }
-    return [exRe, exIm];
-}
-
-function bitReversalSort(seq) {
-    if (!Number.isInteger(Math.log2(seq.length))) throw new Error(
-        "Bit reversal sorting can only be performed on a collection with a length of a power of 2"); 
-
-    return seq;
-}
-
-function FFT(ReX, ImX) {
-    // let power = Math.log2(complexSig.length)
-    // if (!Number.isInteger(power)) {
-    //     // let n = Math.pow(2, Math.ceil(power));
-    //     // for (i = complexSig.)
-    //     //We could zero pad the signal to next power of two, 
-    //     //Or perform the Chirp Z-Transform
-    // } else {
-
+function convolve2D(signal, psf) {
+    let { rows, cols } = dim(psf);
+    // if (rows === 3 && rows === cols ) {
+    //     //Naive 2d convolution
     // }
-    let tempR,
-        tempI,
-        m = bankRound(Math.log2(ReX.length)),
-        j = ReX.length / 2;
-
-    //Sort in Reverse Bit order
-    for (let i = 1; i < ReX.length; i++) {
-        if (i < j) {
-            tempR = ReX[j];
-            tempI = ImX[j];
-            ReX[j] = ReX[i];
-            ImX[j] = ImX[i];
-            ReX[i] = tempR;
-            ImX[i] = tempI;
-        }
-        let k = ReX.length / 2;
-        while (k <= j) {
-            j = j - k;
-            k = k / 2;
-        }
-        j = j + k;
-    }
-    let g = 0;
-    //Loop for each stage
-    for (let stage = 1; stage <= m; stage++) {  
-        let spectraSize = Math.pow(2, stage);      
-        let spectraSize2 = spectraSize / 2;
-        let ur = 1;
-        let ui = 0;
-        //calculate sine and cosine values
-        let sr = Math.cos(Math.PI / spectraSize2);
-        let si = Math.sin(Math.PI / spectraSize2);
-
-        //Loop for each sub-DTF
-        for (j = 1; j <= spectraSize2; j++) {
-            //Loop for each Butterfly
-            for(let i = j - 1; i < ReX.length; i += spectraSize) {
-                let ip = i + spectraSize2;
-                //Butterfly calculation
-                tempR = ReX[ip] * ur - ImX[ip] * ui;
-                tempI = ReX[ip] * ui + ImX[ip] * ur;
-                ReX[ip] = ReX[i] - tempR;
-                ImX[ip] = ImX[i] - tempI;
-                ReX[i] = ReX[i] + tempR;
-                ImX[i] = ImX[i] + tempI;
-            }
-            tempR = ur;
-            ur = tempR * sr - ui * si;
-            ui = tempR * si + ui * sr;
-        }
-    }
-    return {ReX, ImX};
+    // if (filterKernelIsSeperable) {
+    //     //Decompose Kernel into horizontal and vertical projections
+    //     //convolve rows with horizontal projection
+    //     //convolve columns of intermediate image with vertical projection
+    // } else {
+    //     //convolveFFT2D
+    // }
 }
 
-function inverseFFT(ReX, ImX) {
-    for (let k = 0; k < ReX.length; k++) {
-        ImX[k] *= -1;
-    }
-
-    FFT(ReX, ImX);
-
-    for (let i = 0; i < ReX.length; i++) {
-        ReX[i] = ReX[i] / ReX.length;
-        ImX[i] = -1 * ImX[i] / ReX.length;
-    }
-
-    return {ReX, ImX};
+function InverseFFT2D(ReX, ImX) {
+    //Take Inverse FFt of the Rows
+    //Take Inverse FFT of the cols
 }
+const freqResolution = (fftSize, sampleRate) => sampleRate / fftSize;
+
+const timeResolution = (fftSize, sampleRate) => fftSize / sampleRate;
 
 module.exports = {
     "convolve" : convolveOutput,
     realDFT,
-    inverseDFT,
+    inverseRDFT,
     correlate,
     FFT,
     inverseFFT,

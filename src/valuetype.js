@@ -33,23 +33,37 @@ function bankRound(num, decimalPlaces=0) {
     return decimalPlaces ? r / m : r;
 }
 
-function zeros(n, m=0) {
+function initialize(value, n, m=0) {
     let z = [];
     for (let i = 0; i < n; i++) {
-        if (m > 0) z[i] = [];
-        else z[i] = 0;
-        for (let j = 0; j < m; j++) {
-            z[i][j] = 0;
-        }
+        if (m > 0) { 
+            z[i] = [];
+        } else {
+            z[i] = 0;
+            for (let j = 0; j < m; j++) {
+                z[i][j] = 0;
+            }
+        } 
     }
     return z;
 }
 
+function zeros(n, m=0) {
+    return initialize(0, n, m);
+}
+
+function round(n, digits=0) {
+    var multiplicator = Math.pow(10, digits);
+    n = parseFloat((n * multiplicator).toFixed(11));
+    return Math.round(n) / multiplicator;
+}
 module.exports = {
     is8BitInt,
     inUnitInterval,
     inNormalUI,
     clampTo,
     bankRound,
-    zeros
+    zeros,
+    initialize,
+    round
 }

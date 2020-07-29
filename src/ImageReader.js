@@ -3,13 +3,23 @@ const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
 
 const ImageReader = (function() {
-    function ImageReader(img, a) {
+    function ImageReader(img, width, a) {
         this.img = img;
         this.colorIdx = 0;
-        this.a = a;
-        //this.pixels = [];
+        this.widthRes = width;
+        this.heightRes = img.length / width / (a ? 4 : 3);
+        this.tupleSize = a ? 4 : 3;
         this.lightVector; //maybe choose object so you can cache different ranges?/
     }
+    ImageReader.prototype.areValidIndices = function(rowI, colI) {
+        if (rowI >= this.heightRes) throw new Error("Row index " + rowI + " is out of bounds.");
+        if (colI >= this.widthRes) throw new Error("Columnindex " + colI + " is our of bound.");
+        return true;
+    }
+    ImageReader.prototype.flatPixelIndex = function(rowI, colI) {
+        areValidIndices(rowI, colI);
+        return (rowI * this.widthRes * this.tupleSize) + (colI * this.tupleSize);
+    } 
     ImageReader.prototype.nextColor = function(a=false) {
         let color;
         if (a) {
@@ -22,7 +32,7 @@ const ImageReader = (function() {
                 this.img[this.colorIdx], this.img[this.colorIdx + 1], this.img[this.colorIdx + 2]
             );
         }
-        this.colorIdx += this.a ? 4 : 3;
+        this.colorIdx += this.tupleSize;
         return color;
     } 
     ImageReader.prototype.eachColor = function(cb, a=false) {
@@ -48,7 +58,7 @@ const ImageReader = (function() {
     }
     ImageReader.prototype.toLightness = function(range=255) {
         //if (this.lightVector) ) Cache and also check range;
-        let LVector = []
+        let LVector = [];
         this.eachColor((color) => {
             LVector.push(
                 Math.round(
@@ -66,12 +76,62 @@ const ImageReader = (function() {
             if (!lightIdxs[lVec[m]]) {
                 lightIdxs[lVec[m]] = [];
             }
-            lightIdxs[lVec[m]].push(m * this.a ? 4 : 3);
+            lightIdxs[lVec[m]].push(m * this.tupleSize);
         }
         return lightIdxs;
     }
     ImageReader.prototype.reset = function() {
         this.colorIdx = 0;
+    }
+    ImageReader.prototype.redChannelAt = function(rowI, colI) {
+        return this.img[this.flatPixelIndex(rowI, colI)];
+    }
+    ImageReader.prototype.greenChannelAt = function(rowI, colI) {
+        return this.img[this.flatPixelIndex(rowI, colI) + 1];
+    }
+    ImageReader.prototype.blueChannelAt = function(rowI, colI) {
+        return this.img[this.flatPixelIndex(rowI, colI) + 2];
+    }
+    ImageReader.prototype.pixelAt = function(rowI, colI) {
+        let pixelI = this.flatPixelIndex(rowI, colI);
+        return RGB.color(this.img[pixelI], this.img[pixelI + 1], this.img[pixelI + 2]);
+    }
+    function getChannel(img, heightRes, widthRes, channel, tupleSize) {
+        return function(flat=true) {
+            let cc = [];
+            let flatIndex = 0;
+            if (flat) {
+                let pi = 0;
+                for (flatIndex = 0; flatIndex < img.length; flatIndex += tupleSize) {
+                    cc[pi] = img[flatIndex + channel];
+                    pi++
+                }
+            } else {
+                for (let r = 0; r < heightRes; r++) {
+                    cc[r] = [];
+                    for (let c = 0; c < widthRes; c++) {
+                        cc[r][c] = img[flatIndex + channel];
+                        flatIndex += tupleSize;
+                    }
+                }
+            }
+            return cc;
+        }
+    } 
+    ImageReader.prototype.getRedChannel = function(flat) {
+        return getChannel(this.img, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
+    }
+    ImageReader.prototype.getGreenChannel = function(flat) {
+        return getChannel(this.img, this.heightRes, this.widthRes, 1, this.tupleSize)(flat);
+    }
+    ImageReader.prototype.getBlueChannel = function(flat) {
+        return getChannel(this.img, this.heightRes, this.widthRes, 2, this.tupleSize)(flat);
+    }
+    ImageReader.prototype.getAlphaChannel = function(flat) {
+        if (this.tupleSize !== 4) {
+            return null;
+        }
+        return getChannel(this.img, this.heightRes, this.widthRes, 3, this.tupleSize)(flat);     
     }
     return ImageReader;
 })();
