@@ -57,6 +57,11 @@ function round(n, digits=0) {
     n = parseFloat((n * multiplicator).toFixed(11));
     return Math.round(n) / multiplicator;
 }
+
+function isPowerOfTwo(num) {
+    return (num & ( num - 1)) == 0;
+}
+
 module.exports = {
     is8BitInt,
     inUnitInterval,
@@ -65,5 +70,6 @@ module.exports = {
     bankRound,
     zeros,
     initialize,
-    round
+    round,
+    isPowerOfTwo
 }

@@ -1,5 +1,5 @@
-const { bankRound, zeros } = require('./valuetype');
-
+const { bankRound, zeros, isPowerOfTwo } = require('./valuetype');
+const { convolveComplex } = require('signal.js');
 //Given one N-point time domain signal, the Discrete Fourier Transform decomposesas the signal into
 //two N/2-point frequency domain signals ReX and ImX. These are returned as key-value pairs of an object.
 //The values of ReX and ImX are scalars that scale a sinusoid function (Cosine for ReX and Sine for ImX)
@@ -55,20 +55,30 @@ function inverseRealDFT(ReX, ImX) {
 
 //Fast Fourier Transform of a Complex Signal in the time domain. 
 function FFT(ReX, ImX) {
-    //TODO: make compatible with signal with length not a power of 2.
-    // let power = Math.log2(complexSig.length)
-    // if (!Number.isInteger(power)) {
-    //     // let n = Math.pow(2, Math.ceil(power));
-    //     // for (i = complexSig.)
-    //     //We could zero pad the signal to next power of two, 
-    //     //Or perform the Chirp Z-Transform
-    let tempR,
-        tempI,
-        m = bankRound(Math.log2(ReX.length)),
-        j = ReX.length / 2;
+    let n = ReX.length;
+    if (n !== ImX.length) throw new Error("Real and Imaginary signal component lengths do not match");
+    if (n === 0) return;
+    //If Signal length is a power of two perform Radix-2 FFT
+    if (isPowerOfTwo(n)) {
+        radix2FFT(ReX, ImX); 
+    } else {
+        //If Signal length is arbitrary or prime, perform chirp-z transfrom
+        chirpZTransform(ReX, ImX);
+    }
+}
+
+function radix2FFT(ReX, ImX) {
+    let n = ReX.length;
+    if (n !== ImX.length) throw new Error("Real and Imaginary signal component lengths do not match");
+    if (!isPowerOfTwo(n)) throw new Error("Signal length must be a power of 2 to perform radix-2 transform");
+    if (n === 1) return { ReX, ImX };
+    let m = bankRound(Math.log2(n)),
+        j = n / 2,
+        tempR,
+        tempI;
 
     //Sort in Reverse Bit order
-    for (let i = 1; i < ReX.length; i++) {
+    for (let i = 1; i < n; i++) {
         if (i < j) {
             tempR = ReX[j];
             tempI = ImX[j];
@@ -77,7 +87,7 @@ function FFT(ReX, ImX) {
             ReX[i] = tempR;
             ImX[i] = tempI;
         }
-        let k = ReX.length / 2;
+        let k = n / 2;
         while (k <= j) {
             j = j - k;
             k = k / 2;
@@ -98,7 +108,7 @@ function FFT(ReX, ImX) {
         //Loop for each Sub-DTF
         for (j = 1; j <= spectraSize2; j++) {
             //Loop for each Butterfly
-            for(let i = j - 1; i < ReX.length; i += spectraSize) {
+            for(let i = j - 1; i < n; i += spectraSize) {
                 let ip = i + spectraSize2;
                 //Butterfly calculation
                 tempR = ReX[ip] * ur - ImX[ip] * ui;
@@ -113,20 +123,22 @@ function FFT(ReX, ImX) {
             ui = tempR * si + ui * sr;
         }
     }
-    return {ReX, ImX};
+    return { ReX, ImX };
 }
 
 //Transforms complex signal in frequency domain to complex signal in the time domain
 function inverseFFT(ReX, ImX) {
-    for (let k = 0; k < ReX.length; k++) {
+    let n = ReX.length;
+    if (n !== ImX.length) throw new Error("Real and Imaginary signal component lengths do not match");
+    for (let k = 0; k < n; k++) {
         ImX[k] *= -1;
     }
 
     FFT(ReX, ImX);
 
-    for (let i = 0; i < ReX.length; i++) {
-        ReX[i] = ReX[i] / ReX.length;
-        ImX[i] = -1 * ImX[i] / ReX.length;
+    for (let i = 0; i < n; i++) {
+        ReX[i] = ReX[i] / n;
+        ImX[i] = -1 * ImX[i] / n;
     }
 
     return { ReX, ImX };
@@ -135,44 +147,50 @@ function inverseFFT(ReX, ImX) {
 //From N-point time-domain signal, calculate the Real Frequency Spectrum using the 
 //Fast Fourier Transform. The real spectrum is composed of ReX and ImX, which are both 
 //N / 2 + 1 length signals.
-function RDFTFromFFT(signal, real=false) {
-    let ReX = signal.slice(0), //Initialize Real part of signal
-        ImX = zeros(signal.length); //Initialize Imaginary part of signal
-    FFT(ReX, ImX); //Take Fast Fourier Transform
-    //Return Real DFT spectrum
-    if (real) {
-        return { 
-            "ReX" : ReX.slice(0, signal.length / 2 + 1),
-            "ImX" : ReX.slice(0, signal.length / 2 + 1)
-        }
-    }
-    return { ReX, ImX };
-}
+function realFFT(signal, realOutput=false) {
+    let n = signal.length,
+        ReX = signal.slice(0), //Initialize Real part of signal
+        ImX = zeros(n); //Initialize Imaginary part of signal
 
+    FFT(ReX, ImX); //Take Fast Fourier Transform
+    
+    if (realOutput) {
+        //Return Real DFT spectrum 
+        return { 
+            "ReX" : ReX.slice(0, n / 2 + 1),
+            "ImX" : ReX.slice(0, n / 2 + 1)
+        }
+    } else {
+        //Return complex spectrum
+        return { ReX, ImX };
+    }
+}
 //For 2-Dimensional spatial domain signal. Returns complex 2D signal in frequency domain. 
 function FFT2D(signal) {
-    let ReImg = [],
+    let rn = signal.length,
+        cn = signal[0].length,
+        ReImg = [],
         ImImg = [],
         freq;
     //Take FFT of rows and store in real and imaginary images.
-    for (let row = 0; row < signal.length; row++) {
-        freq = RDFTFromFFT(signal[row]);
+    for (let row = 0; row < rn; row++) {
+        freq = realFFT(signal[row], false);
         ReImg[row] = freq.ReX;
         ImImg[row] = freq.ImX;
     }
     let ReColFreqs,
         ImColFreqs;
     //Take FFT of each column
-    for (let col = 0; col < signal[0].length; col++) {
+    for (let col = 0; col < cn; col++) {
         ReColFreqs = [];
         ImColFreqs = [];
-        for (let row = 0; row < signal.length; row++) {
+        for (let row = 0; row < rn; row++) {
             ReColFreqs[row] = ReImg[row][col];
             ImColFreqs[row] = ImImg[row][col];
         }
         FFT(ReColFreqs, ImColFreqs);
         //Store Results back in column
-        for (let row = 0; row < signal.length; row++) {
+        for (let row = 0; row < rn; row++) {
             ReImg[row][col] = ReColFreqs[row];
             ImImg[row][col] = ImColFreqs[row];
         }
@@ -180,10 +198,52 @@ function FFT2D(signal) {
     return {ReImg, ImImg};
 }
 
+function chirpZTransform(ReX, ImX) {
+    let n = ReX.length;
+    if (n !== ImX.length) throw new Error("Real and Imaginary components must have same number of elements.");
+    let m = 1;
+    while (m < n * 2 + 1) m *= 2;
+    let tcos = [],
+        tsin = [],
+        ReA = [],
+        ImA = [],
+        ReB = [],
+        ImB = [];
+
+    for (let i = 0; i < n; i++) {
+        let j = i * i % (n * 2);
+        tcos[i] = Math.cos(Math.PI * j / n);
+        tsin[i] = Math.sin(Math.PI * j / n);
+        ReA[i] = ReX[i] * tcos[i] + ImX[i] * tsin[i];
+        ImA[i] = ImX[i] * tcos[i] - ReX[i] * tsin[i];
+    }
+    //Pad with zeros so that length is radix-2 number M
+    for (let i = n; i < m; i++) {
+        ReA[i] = 0;
+        ImA[i] = 0;
+    }
+
+    ReB[0] = tcos[0];
+    ImB[0] = tsin[0];
+    for (let i = 1; i < n; i++) {
+        ReB[i] = ReB[m - i] = tcos[i];
+        ImB[i] = ImB[m - i] = tsin[i];
+        console.log(ReB[n]);
+    }
+
+    convolveComplex(ReA, ImA, ReB, ImB);
+    for (let i = 0; i < n; i++) {
+        ReX[i] = ReA[i] * tcos[i] + ImA[i] * tsin[i];
+        ImX[i] = ImA[i] * tcos[i] - ReA[i] * tsin[i];
+    }
+    return ReX, ImX;
+}
+
 module.exports = {
     realDFT,
     inverseRealDFT,
     FFT2D,
     FFT,
+    realFFT,
     inverseFFT,
 }
