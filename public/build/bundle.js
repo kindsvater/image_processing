@@ -532,7 +532,7 @@ function translateIndex(ind, chans, pOffset, from) {
 function radix2FFTImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
     if (!to) to = ReX.length;
     let ccTotal = to - from,
-        n = pWidth > 1 ? ((((ccTotal / chans) - 1) / pWidth) + 1) : ccTotal / chans;
+        n = pWidth > 1 ? ((((ccTotal / chans) - 1) / pWidth) + 1) : ccTotal / chans,
         m = bankRound(Math.log2(n)),
         j = n / 2,
         tempR,
@@ -602,7 +602,6 @@ function chirpZTransformImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
     if (from < 0 || from >= ReX.length) throw new Error("From Index " + from + " is out of range");
     if (to > ReX.length) throw new Error("To Index " + to + " is out of range");
     if (!to) to = ReX.length;
-
     let ccTotal = to - from;
     let n = pWidth > 1 ? ((((ccTotal / chans) - 1) / pWidth) + 1) : ccTotal / chans;
     let m = 1;
@@ -611,10 +610,10 @@ function chirpZTransformImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
     for (let c = 0; c < chans; c++) {
         let tcos = [],
             tsin = [],
-            ReA = [],
-            ImA = [],
-            ReB = [],
-            ImB = [];
+            ReA = zeros(m);
+            ImA = zeros(m);
+            ReB = zeros(m);
+            ImB = zeros(m);
 
         for (let i = 0; i < n; i++) {
             let j = i * i % (n * 2),
@@ -633,10 +632,11 @@ function chirpZTransformImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
         ReB[0] = tcos[0];
         ImB[0] = tsin[0];
         for (let i = 1; i < n; i++) {
-            ReB[i] = ReB[m - i] = tcos[i];
-            ImB[i] = ImB[m - i] = tsin[i];
+            ReB[i] = tcos[i];
+            ImB[i] = tsin[i];
+            ReB[m - i] = tcos[i];
+            ImB[m - i] = tsin[i];
         }
-        console.log(ReB);
 
         convolveComplex(ReA, ImA, ReB, ImB);
         for (let i = 0; i < n; i++) {
@@ -658,28 +658,19 @@ function FFT1DImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
     if (n === 0) return;
     //If Signal length is a power of two perform Radix-2 FFT
     if (isPowerOfTwo(n)) {
-        radix2FFTImage(ReX, ImX, chans, from, to, pWidth, inPlace); 
+        radix2FFTImage(ReX, ImX, chans, from, to, pWidth); 
     } else {
         //If Signal length is arbitrary or prime, perform chirp-z transfrom
-        chirpZTransformImage(ReX, ImX);
+        chirpZTransformImage(ReX, ImX, chans, from, to, pWidth);
     }
 }
 
-/** Calculates Fourier Transform of a 2D image represented as a flat multi-channel array.
- * @param   {Array}   img     Flat array of pixel color channels. Length is number of pixels * number of channels.
- * @param   {Int}     pWidth  the width of the image in pixels.
- * @param   {Int}     chans   the number of color channels per pixel.
- * @param   {boolean} inPlace If true will alter the original image array in place.
- * @returns {Object} ComplexSignal     A complex representation of the flat image in the frequency domain.
- * @returns {Array}  ComplexSignal.ReX The real component of the signal in the freq domain.
- * @returns {Array}  ComplexSignal.ImX The imaginary component of the signal in the freq domain.
-**/
-function realFFT2DImage(img, pWidth, chans, inPlace=true) {
-    let ReX = inPlace ? img : [];
-        ImX = zeros(img.length);
-        pHeight = img.length / pWidth / chans;
-        console.log(img.length);
-        console.log(pHeight);
+
+
+function FFT2DFromComplexImage(ReX, ImX, chans, pWidth) {
+    let ccTotal = ReX.length;
+    if (ccTotal !== ImX.length) throw new Error("Complex Image Component lengths do not match.");
+    let pHeight = ccTotal / pWidth / chans;
 
     //Take FFT of rows and store in real and imaginary images.
     for (let row = 0; row < pHeight; row++) {
@@ -692,18 +683,62 @@ function realFFT2DImage(img, pWidth, chans, inPlace=true) {
     return {ReX, ImX};
 }
 
+/** Calculates Fourier Transform of a 2D image represented as one flat multi-channel array.
+ * @param   {Array}   img     Flat array of pixel color channels. Length is number of pixels * number of channels.
+ * @param   {Int}     pWidth  the width of the image in pixels.
+ * @param   {Int}     chans   the number of color channels per pixel.
+ * @param   {boolean} inPlace If true will alter the original image array in place.
+ * @returns {Object} ComplexSignal     A complex representation of the flat image in the frequency domain.
+ * @returns {Array}  ComplexSignal.ReX The real component of the signal in the freq domain.
+ * @returns {Array}  ComplexSignal.ImX The imaginary component of the signal in the freq domain.
+**/
+function FFT2DFromRealImage(img, pWidth, chans, inPlace=true) {
+    let ReX = inPlace ? img : [];
+        ImX = zeros(img.length);
+    return FFT2DFromComplexImage(ReX, ImX, chans, pWidth);
+}
+
+/** Inverse Fourier Transform of a complex 2D image in the frequency domain epresented as two flat multi-channel array components
+ * @param   {Array}   ReX    Real Component of multi-channel flat image.
+ * @param   {Array}   ImX    Imaginary Component of multi-channel flat image.
+ * @param   {Int}     pWidth  the width of the image in pixels.
+ * @param   {Int}     chans   the number of color channels per pixel.
+ * @returns {Object} ComplexSignal     References to the component arrays that have been altered in place.
+ * @returns {Array}  ComplexSignal.ReX The real component of the signal in the freq domain.
+ * @returns {Array}  ComplexSignal.ImX The imaginary component of the signal in the freq domain.
+**/
+function inverseFFT2DImage(ReX, ImX, chans, pWidth) {
+    let ccTotal = ReX.length;
+        pHeight = ccTotal / pWidth / chans,
+        normal = pHeight * pWidth;
+    if (ccTotal !== ImX.length) throw new Error("Complex Image Component lengths do not match");
+    for (let k = 0; k < ccTotal; k++) {
+        ImX[k] *= -1;
+    }
+
+    FFT2DFromComplexImage(ReX, ImX, chans, pWidth);
+
+    //Normalize each value by dividing by pixelWidth * pixelHeight
+    for (let i = 0; i < ccTotal; i++) {
+        ReX[i] = ReX[i] / normal;
+        ImX[i] = -1 * ImX[i] / normal;
+    }
+
+    return { ReX, ImX };
+}
 
 module.exports = {
     histogram,
     cdf,
     equalizeHist,
     equalizeImgLight,
-    realFFT2DImage,
+    FFT2DFromRealImage,
+    inverseFFT2DImage,
     FFT1DImage
 }
 },{"./ImageReader.js":1,"./RGB":2,"./cie":3,"./sRGB":10,"./signal.js":11,"./valuetype":13}],6:[function(require,module,exports){
 const { ImageReader } = require('./ImageReader.js');
-const { histogram, cdf, equalizeImgLight, realFFT2DImage } = require('./imageProcessing');
+const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage } = require('./imageProcessing');
 const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
@@ -775,7 +810,7 @@ img.onload = function() {
     //     contextData.data.set(rImageData);
     //     context.putImageData(contextData, 0, 0); 
     // })
-    let grays = gaussGray((10 * 10), 32);
+    let grays = gaussGray((512, 512), 32);
     console.log(grays.length)
     let hist = [];
     for (let m = 0; m < 256; m++) {
@@ -794,9 +829,12 @@ img.onload = function() {
     for (let g = 0; g < grays.length; g++) {
         grayImg.push(grays[g], grays[g], grays[g], 255);
     }
-    console.log("Fourier");
-    realFFT2DImage(grayImg, 10, 4, true);
     console.log(grayImg);
+    console.log("Fourier");
+    let { ReX, ImX } = FFT2DFromRealImage(grayImg, 512, 4, true);
+    console.log(ReX);
+    inverseFFT2DImage(ReX, ImX, 4, 512);
+    console.log(ReX)
     contextData.data.set(new Uint8ClampedArray(grayImg));
     context.putImageData(contextData, 0, 0); 
 

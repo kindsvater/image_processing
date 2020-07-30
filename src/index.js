@@ -1,5 +1,5 @@
 const { ImageReader } = require('./ImageReader.js');
-const { histogram, cdf, equalizeImgLight, realFFT2DImage } = require('./imageProcessing');
+const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage } = require('./imageProcessing');
 const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
@@ -71,7 +71,7 @@ img.onload = function() {
     //     contextData.data.set(rImageData);
     //     context.putImageData(contextData, 0, 0); 
     // })
-    let grays = gaussGray((10 * 10), 32);
+    let grays = gaussGray((512, 512), 32);
     console.log(grays.length)
     let hist = [];
     for (let m = 0; m < 256; m++) {
@@ -90,9 +90,12 @@ img.onload = function() {
     for (let g = 0; g < grays.length; g++) {
         grayImg.push(grays[g], grays[g], grays[g], 255);
     }
-    console.log("Fourier");
-    realFFT2DImage(grayImg, 10, 4, true);
     console.log(grayImg);
+    console.log("Fourier");
+    let { ReX, ImX } = FFT2DFromRealImage(grayImg, 512, 4, true);
+    console.log(ReX);
+    inverseFFT2DImage(ReX, ImX, 4, 512);
+    console.log(ReX)
     contextData.data.set(new Uint8ClampedArray(grayImg));
     context.putImageData(contextData, 0, 0); 
 
