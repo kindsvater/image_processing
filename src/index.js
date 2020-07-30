@@ -1,12 +1,12 @@
 const { ImageReader } = require('./ImageReader.js');
-const { histogram, cdf, equalizeImgLight } = require('./imgProcessing');
+const { histogram, cdf, equalizeImgLight, realFFT2DImage } = require('./imageProcessing');
 const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
 const { gaussGray } = require('./randGen');
 const { zeros, round } = require('./valuetype');
 const { randIntArray } = require('./randGen');
-const { extendRealFreqDomain, FFT, inverseFFT } = require('./fourier');
+const { extendRealFreqDomain, FFT, inverseFFT } = require('./signal');
 const { impulse, psf } = require('./filter');
 
 // function checkFFT() {
@@ -47,10 +47,10 @@ img.onload = function() {
     console.log("image pix = " + rawImgData.length);
     console.log(rawImgData)
     let read = new ImageReader(rawImgData, cwidth, true);
-    console.log(read.getRedChannel());
-    console.log(read.widthRes);
-    console.log(read.heightRes);
-    console.log(read.widthRes * read.heightRes * 4);
+    // console.log(read.getRedChannel());
+    // console.log(read.widthRes);
+    // console.log(read.heightRes);
+    // console.log(read.widthRes * read.heightRes * 4);
     let LI = read.getLightIdxs();
 
     // convertImagetoASCII(rawImgData, cwidth, (textImage) => {
@@ -71,8 +71,8 @@ img.onload = function() {
     //     contextData.data.set(rImageData);
     //     context.putImageData(contextData, 0, 0); 
     // })
-    let grays = gaussGray(rawImgData.length / 8, 32);
-
+    let grays = gaussGray((10 * 10), 32);
+    console.log(grays.length)
     let hist = [];
     for (let m = 0; m < 256; m++) {
         hist[m] = 0;
@@ -90,6 +90,9 @@ img.onload = function() {
     for (let g = 0; g < grays.length; g++) {
         grayImg.push(grays[g], grays[g], grays[g], 255);
     }
+    console.log("Fourier");
+    realFFT2DImage(grayImg, 10, 4, true);
+    console.log(grayImg);
     contextData.data.set(new Uint8ClampedArray(grayImg));
     context.putImageData(contextData, 0, 0); 
 

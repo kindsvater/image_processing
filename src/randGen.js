@@ -102,7 +102,7 @@ function gaussGray(res, stdDev, mean=128) {
         gVal;
 
     if (res % 2 === 1) {
-       gVal = clampTo(Math.round(gaussBoxMuller(mean, stdDev, false)),0, 255, true);
+       gVal = clampTo(Math.round(gaussBoxMuller(mean, stdDev, false)),0, 255, false);
        randGray.push(gVal);
        p++;
     }
@@ -110,7 +110,7 @@ function gaussGray(res, stdDev, mean=128) {
         gVal = gaussBoxMuller(mean, stdDev, true);
         randGray.push(Math.round(clampTo(gVal[0], 0, 255, true)));
         randGray.push(Math.round(clampTo(gVal[1], 0, 255, true)));
-        p++;
+        p += 2;
     }
     return randGray;
 }
