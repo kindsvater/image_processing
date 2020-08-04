@@ -1,6 +1,6 @@
 'use strict';
 const { dim } = require('./lin');
-const { zeros, bankRound, isPowerOfTwo } = require('./valuetype');
+const { zeros, bankRound, isPowerOfTwo } = require('./util');
 
 const displayRefA = 1;
 const audioRefA = 0.00001;

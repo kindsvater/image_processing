@@ -1,4 +1,4 @@
-const { is8BitInt, inUnitInterval } = require('./valuetype.js');
+const { is8BitInt, inUnitInterval } = require('./util.js');
 const { multiply } = require('./lin.js');
 const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
 

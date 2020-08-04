@@ -142,12 +142,10 @@ module.exports = {
 }
 },{"./cie":3,"./rgb":9,"./srgb":12}],2:[function(require,module,exports){
 const { invert, dot } = require('./lin.js');
-
 const redLevel = (rgbColor) => rgbColor[0];
 const greenLevel = (rgbColor) => rgbColor[1];
 const blueLevel = (rgbColor) => rgbColor[2];
-
-let rgb = module.exports
+const rgb = module.exports
 
 rgb.RGBA = {
     "color" : (r, g, b, a) => [r, g, b, a ? a : 255],
@@ -156,14 +154,12 @@ rgb.RGBA = {
     blueLevel,
     "alphaLevel" : (rgbaColor) => rgbaColor[3]
 } 
-
 rgb.RGB = {
     color : (r, g, b) => [r, g, b],
     redLevel,
     greenLevel,
     blueLevel
 } 
-
 rgb.averageChannelLevel = (rgbColor) => (rgbColor[0] + rgbColor[1] + rgbColor[2]) / 3;
 rgb.XYZconversionMatrix = (primaryCoords, XYZWhite) => {
     let primXYZ = [
@@ -187,7 +183,7 @@ rgb.createRGBRelativeLuminance = (XYZconversionMatrix) =>
     rgb => dot([redLevel(rgb), greenLevel(rgb), blueLevel(rgb)], XYZconversionMatrix[1]);
 
 },{"./lin.js":7}],3:[function(require,module,exports){
-const { inNormalUI, clampTo } =  require('./valuetype.js');
+const { inNormalUI, clampTo } =  require('./util.js');
 
 //Device Invariant Representation of Color. The tristimulus values X, Y, and Z technically
 // range from 0.0000 to infinity, but never exceed 1.2000 in practice. 
@@ -341,8 +337,8 @@ module.exports = {
     XYZ,
 }
 
-},{"./valuetype.js":13}],4:[function(require,module,exports){
-const { zeros, initialize, round } = require("./valuetype");
+},{"./util.js":14}],4:[function(require,module,exports){
+const { zeros, initialize, round } = require("./util");
 
 const impulse = {
     "delta" : (n=16, shift=0, scale=1) => { 
@@ -423,11 +419,12 @@ module.exports = {
     impulse,
     psf
 }
-},{"./valuetype":13}],5:[function(require,module,exports){
+},{"./util":14}],5:[function(require,module,exports){
+'use strict';
 const { RGB, RGBA } = require('./RGB');
 const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./sRGB');
 const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie');
-const { bankRound, zeros, isPowerOfTwo } = require('./valuetype');
+const { bankRound, zeros, isPowerOfTwo } = require('./util');
 const { ImageReader } = require('./ImageReader.js');
 const { convolveComplex } = require('./signal.js');
 
@@ -665,8 +662,6 @@ function FFT1DImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
     }
 }
 
-
-
 function FFT2DFromComplexImage(ReX, ImX, chans, pWidth) {
     let ccTotal = ReX.length;
     if (ccTotal !== ImX.length) throw new Error("Complex Image Component lengths do not match.");
@@ -727,6 +722,203 @@ function inverseFFT2DImage(ReX, ImX, chans, pWidth) {
     return { ReX, ImX };
 }
 
+// function multiplyFreqImage(ReX, ImX, ReH, ImH, chans, inPlace=false) {
+//     let min = 0;
+//     let max = 
+//     if (!max) max = ReX.length;
+//     let ReY = inPlace ? ReX : [],
+//         ImY = inPlace ? ImX : [];
+
+//     if (inPlace) {
+//         let temp;
+//         for (let i = min; i < max; i++) {
+//             temp = ReX[i] * ReH[i] - ImX[i] * ImH[i]; 
+//             ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+//             ReY[i] = temp;
+//         }
+//     } else {
+//         for (let i = min; i < max; i++) {
+//             ReY[i] = ReX[i] * ReH[i] - ImX[i] * ImH[i];
+//             ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+//         }
+//     }
+//     return { "ReX" : ReY, "ImX" : ImY }
+// }
+
+function padComplexImage(ReX, ImX, pWidth, chans, toWidth, toHeight) {
+    let ccTotal = ReX.length;
+    if (ccTotal !== ImX.length) throw new Error("Complex Image Component lengths do not match");
+    let pHeight = ccTotal / pWidth / chans,
+        newCCTotal = chans * toWidth * toHeight,
+        newRows = toHeight - pHeight,
+        newCols = toWidth - pWidth;
+    
+    //Add new rows to end of array
+    let endZeros = newRows * (pWidth + newCols) * chans;
+    for (let z = 1; z <= endZeros; z++) {
+        ReX[newCCTotal - z] = 0;
+        ImX[newCCTotal - z] = 0;
+    }
+    //Move over each former row by the column padding amount, starting with last.
+    let endIndex = newCCTotal - endZeros - 1;
+    let colZeros = newCols * chans;
+    for (let r = pHeight; r > 0; r--) {
+        for (let z = 1; z <= colZeros; z++) {
+            ReX[endIndex] = 0;
+            ImX[endIndex] = 0;
+            endIndex--;
+        }
+        let origRowEndIndex = r * chans * pWidth - 1;
+        for (let c = 0; c < pWidth * chans; c++) {
+            ReX[endIndex] = ReX[origRowEndIndex - c];
+            ImX[endIndex] = ImX[origRowEndIndex - c];
+            endIndex--;
+        }
+    }
+    return ReX, ImX;
+}
+
+function padRealImage(img, pWidth, chans, toWidth, toHeight) {
+    let ccTotal = img.length;
+    
+    let pHeight = ccTotal / pWidth / chans,
+        newCCTotal = chans * toWidth * toHeight,
+        newRows = toHeight - pHeight,
+        newCols = toWidth - pWidth;
+    
+    //Add new rows to end of array
+    let endZeros = newRows * (pWidth + newCols) * chans;
+    for (let z = 1; z <= endZeros; z++) {
+        img[newCCTotal - z] = 0;
+    }
+    //Move over each former row by the column padding amount, starting with last.
+    let endIndex = newCCTotal - endZeros - 1;
+    let colZeros = newCols * chans;
+
+    for (let r = pHeight; r > 0; r--) {
+        for (let z = 1; z <= colZeros; z++) {
+            img[endIndex] = 0;
+            endIndex--;
+        }
+        let origRowEndIndex = r * chans * pWidth - 1;
+        for (let c = 0; c < pWidth * chans; c++) {
+            img[endIndex] = img[origRowEndIndex - c];
+            endIndex--;
+        }
+    }
+    return img;
+}
+
+function depadRealImage(img, pWidth, chans, minusWidth, minusHeight) {
+    let ccTotal = img.length;
+    let pHeight = ccTotal / pWidth / chans,
+        newRows = pHeight - minusHeight;
+        newCols = pWidth - minusWidth,
+        endIndex = newCols * chans;
+        colChansRmv = minusWidth * chans;
+        currIndex = endIndex + colChansRmv;
+        for (let r = 1; r < newRows; r++) {
+            let sectionLen = newCols * chans;
+            for (let c = 0; c < sectionLen; c++) {
+                img[endIndex] = img[currIndex];
+                endIndex++;
+                currIndex++;
+            }
+            currIndex += colChansRmv;
+        }
+        img.splice(endIndex);
+        return img;
+}
+
+function convolveRealImage(img, imgWidth, imgChans, psf, psfWidth, edge="mirror") {
+    let output = [];
+        ccTotal = img.length,
+        imgHeight = ccTotal / imgWidth / imgChans,
+        psfHeight = psf.length / psfWidth,
+        finalHeight = imgHeight + psfHeight - 1,
+        finalWidth = imgWidth + psfWidth - 1,
+        leftRadius = Math.ceil(psfWidth / 2) - 1, //5 = 2 4 = 1
+        rightRadius = psfWidth - leftRadius - 1, //5 = 2; 4 = 2;
+        topRadius = Math.ceil(psfHeight / 2) - 1,
+        bottomRadius = psfHeight - topRadius - 1,
+        // cntrRI= leftRadius,
+        // cntrCI = rightRadius,
+        currIndex = 0;
+
+    for (let r = 0; r < imgHeight; r++) {
+        for (let c = 0; c < imgWidth; c++) {
+            let sum = 0,
+                subC = 0,
+                subR = 0,
+                totalSub;
+
+            //calculate submerged columns and rows;
+            if (c < leftRadius) subC = leftRadius - c;
+            else if (imgWidth - c <= rightRadius) subC = rightRadius - (imgWidth - c - 1);
+            if (r < topRadius) subR = topRadius - r;
+            else if (imgHeight - r <= bottomRadius) subR = bottomRadius - (imgHeight - r - 1);
+            
+            if (!subR || !subC) {
+                switch(edge) {
+                    case "mirror" : 
+                        wrapRInd = imgHeight - r - 1;
+                        break;
+                    case "pad" : 
+                        val = 0;
+                        break;
+                    case "correct" :
+                        //divide by immersed pixels;
+                        break;
+                }
+            } else {
+                for (let pr = -topRadius; pr <= bottomRadius; pr++) {
+                    for (let pc = -leftRadius; pc <= rightRadius; pc++) {
+                        //sum += img[((r * imgWidth) + c) * chans] * 
+                        
+                    }
+    
+                }
+            }
+        }
+    }
+
+    for (let r = -topRadius; r < imgHeight - topRadius; r++) {
+        for (let c = -leftRadius; c < imgWidth - leftRadius; c++) {
+            let sum = 0,
+                subC = 0,
+                subR = 0,
+                totalSub;
+
+            //calculate submerged columns and rows;
+            if (c < 0) subC = 0 - c;
+            else if (c + psfWidth - 1 >= imgWidth) subC = psfWidth - imgWidth + c;
+            if (r < 0) subR = 0 - r;
+            else if (r + psfHeight - 1 >= imgHeight) subR = psfHeight - imgHeight + r;
+            
+            if (!subR || !subC) {
+                switch(edge) {
+                    case "mirror" : 
+                        wrapRInd = imgHeight - r - 1;
+                        break;
+                    case "pad" : 
+                        val = 0;
+                        break;
+                    case "correct" :
+                        //divide by immersed pixels;
+                        break;
+                }
+            } else {
+                for (let pr = 0; pr < psfHeight; pr++) {
+                    for (let pc = 0; pc < psfWidth; pc++) {
+                        //sum += psf[]
+                        
+                    }
+                }
+            }
+            //output[row col] = 
+        }
+    }
+}
 module.exports = {
     histogram,
     cdf,
@@ -734,20 +926,22 @@ module.exports = {
     equalizeImgLight,
     FFT2DFromRealImage,
     inverseFFT2DImage,
-    FFT1DImage
+    FFT1DImage,
+    padRealImage,
+    padComplexImage,
 }
-},{"./ImageReader.js":1,"./RGB":2,"./cie":3,"./sRGB":10,"./signal.js":11,"./valuetype":13}],6:[function(require,module,exports){
+},{"./ImageReader.js":1,"./RGB":2,"./cie":3,"./sRGB":10,"./signal.js":11,"./util":14}],6:[function(require,module,exports){
 const { ImageReader } = require('./ImageReader.js');
-const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage } = require('./imageProcessing');
+const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageProcessing');
 const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
 const { gaussGray } = require('./randGen');
-const { zeros, round } = require('./valuetype');
+const { zeros, round } = require('./util');
 const { randIntArray } = require('./randGen');
 const { extendRealFreqDomain, FFT, inverseFFT } = require('./signal');
 const { impulse, psf } = require('./filter');
-
+const { Tensor } = require('./tensor');
 // function checkFFT() {
 //     let r = randIntArray(0, 10, 32);
 //     let i = zeros(32);
@@ -771,6 +965,13 @@ const timestep = 30;
 img.src = 'img/flowers.jpg';
 img.onload = function() {
     //checkFFT();
+    let data = [1,2,3,4,5,6,7,8,9];
+    console.log(data);
+    let tt = new Tensor([3,3], data);
+    console.log(tt);
+    tt.pad([1,1, 1], [1,1,1], [0,0,0]);
+    console.log(tt.data);
+    console.log(tt.toNestedArray());
     console.log(psf.gauss(5, 5, 1));
     let canvas = document.getElementById("manip");
     let context = canvas.getContext('2d');
@@ -810,7 +1011,9 @@ img.onload = function() {
     //     contextData.data.set(rImageData);
     //     context.putImageData(contextData, 0, 0); 
     // })
-    let grays = gaussGray((512, 512), 32);
+    let pw = 3;
+    let grays = gaussGray(pw * pw, 32);
+    
     console.log(grays.length)
     let hist = [];
     for (let m = 0; m < 256; m++) {
@@ -820,7 +1023,7 @@ img.onload = function() {
         hist[grays[g]] += 1;
     }
 
-    let data = [];
+    data = [];
     for (let i = 0; i < hist.length; i++) {
         data.push({name: i, value: hist[i] / grays.length})
     }
@@ -829,11 +1032,12 @@ img.onload = function() {
     for (let g = 0; g < grays.length; g++) {
         grayImg.push(grays[g], grays[g], grays[g], 255);
     }
+    console.log(padRealImage(gray, pw, 4, 6, 6));
     console.log(grayImg);
     console.log("Fourier");
-    let { ReX, ImX } = FFT2DFromRealImage(grayImg, 512, 4, true);
+    let { ReX, ImX } = FFT2DFromRealImage(grayImg, pw, 4, true);
     console.log(ReX);
-    inverseFFT2DImage(ReX, ImX, 4, 512);
+    inverseFFT2DImage(ReX, ImX, 4, pw);
     console.log(ReX)
     contextData.data.set(new Uint8ClampedArray(grayImg));
     context.putImageData(contextData, 0, 0); 
@@ -1099,7 +1303,7 @@ function displayHistogram(selector, data, color, height, width) {
     svg.append("g").call(yAxis);
 }
 
-},{"./ImageReader.js":1,"./cie":3,"./filter":4,"./imageProcessing":5,"./randGen":8,"./rgb":9,"./signal":11,"./srgb":12,"./valuetype":13}],7:[function(require,module,exports){
+},{"./ImageReader.js":1,"./cie":3,"./filter":4,"./imageProcessing":5,"./randGen":8,"./rgb":9,"./signal":11,"./srgb":12,"./tensor":13,"./util":14}],7:[function(require,module,exports){
 //Calculates and returns the magnitude (spatial length) of a vector.
 const mag = vector => Math.sqrt(vector.reduce((acc, curr) => acc + (curr * curr)));
 //A and B are both N length vectors. Returns the angle in Radians between them.
@@ -1297,7 +1501,7 @@ module.exports = {
     cross
 }
 },{}],8:[function(require,module,exports){
-const { clampTo } = require('./valuetype.js');
+const { clampTo } = require('./util.js');
 //Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
 //probabilities of two outcomes. Probability in excess of a is distributed evenly 
 //using a RobinHood algorithm. Returns arrays K and V where K is indices of
@@ -1423,52 +1627,12 @@ module.exports.gaussGray = gaussGray;
 module.exports.randIntArray = randIntArray;
 
 
-},{"./valuetype.js":13}],9:[function(require,module,exports){
-const { invert, dot } = require('./lin.js');
-const redLevel = (rgbColor) => rgbColor[0];
-const greenLevel = (rgbColor) => rgbColor[1];
-const blueLevel = (rgbColor) => rgbColor[2];
-const rgb = module.exports
-
-rgb.RGBA = {
-    "color" : (r, g, b, a) => [r, g, b, a ? a : 255],
-    redLevel,
-    greenLevel,
-    blueLevel,
-    "alphaLevel" : (rgbaColor) => rgbaColor[3]
-} 
-rgb.RGB = {
-    color : (r, g, b) => [r, g, b],
-    redLevel,
-    greenLevel,
-    blueLevel
-} 
-rgb.averageChannelLevel = (rgbColor) => (rgbColor[0] + rgbColor[1] + rgbColor[2]) / 3;
-rgb.XYZconversionMatrix = (primaryCoords, XYZWhite) => {
-    let primXYZ = [
-        [primaryCoords[0][0],primaryCoords[1][0], primaryCoords[2][0]],
-        [primaryCoords[0][1],primaryCoords[1][1], primaryCoords[2][1]],
-        [primaryCoords[0][2],primaryCoords[1][2], primaryCoords[2][2]],
-    ]
-
-    let iPXYZ = invert(primXYZ);
-    let XYZScalars = multiply(iPXYZ, XYZWhite);
-    scaleMatrix = [[XYZScalars[0], 0, 0], [0, XYZScalars[1], 0], [0, 0, XYZScalars[2]]];
-    return multiply(primXYZ, scaleMatrix);
-}
-
-function rgbWhiteToXYZ(whiteCoords) {
-    whiteY = greenLevel(whiteCoords);
-    return whiteCoords.map( cc => cc / whiteY);
-}
-
-rgb.createRGBRelativeLuminance = (XYZconversionMatrix) =>
-    rgb => dot([redLevel(rgb), greenLevel(rgb), blueLevel(rgb)], XYZconversionMatrix[1]);
-
-},{"./lin.js":7}],10:[function(require,module,exports){
-const { is8BitInt, inUnitInterval } = require('./valuetype.js');
+},{"./util.js":14}],9:[function(require,module,exports){
+arguments[4][2][0].apply(exports,arguments)
+},{"./lin.js":7,"dup":2}],10:[function(require,module,exports){
+const { is8BitInt, inUnitInterval } = require('./util.js');
 const { multiply } = require('./lin.js');
-const { createRGBRelativeLuminance } = require('./rgb.js');
+const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
 
 //This matrix is used to convert linearized sRGB color to its corresponding color
 //in the XYZ colorspace. The XYZ color is the matrix product of the 
@@ -1564,18 +1728,24 @@ function sRGBtoXYZ(rgb) {
     let linRGB = linearize8Bit(rgb);
     return multiply(sRGBtoXYZMatrix, linRGB);
 }
-
+//Linearizes the 8Bit color channels of a gamm-encoded sRGB color.
 function linearize8Bit(rgb) {
     return rgb.map(cc => decodeGamma8Bit(cc));
 }
-
+//Gamma-encodes each color channel of a linear sRGB color to 8Bit values.
 function delinearize8Bit(rgb) {
     return rgb.map(cc => encodeGamma8Bit(cc));
 }
-
+//Converts XYZ color to Gamma-encoded sRGB
 function XYZtosRGB(xyz) {
     let linRGB = multiply(XYZtosRGBMatrix, xyz);
     return delinearize8Bit(linRGB);
+}
+
+//Creates gray sRGB color from gray value between 0 and 256. 
+//Set a to true if an RGBA output is desired.
+function gray(gVal, a=false) {
+    return a ? RGBA.color(gVal, gVal, gVal) : RGBA.color(gVal, gVal, gVal);
 }
 //Not a proper luma conversion for sRGB, 
 //relies on primaries and white point in NTSC color spaces like YIQ an YUV
@@ -1601,13 +1771,14 @@ module.exports = {
     'whitepointChroma' : whitepointChroma.matrix,
     relativeLuminence,
     sRGBtoXYZ,
-    XYZtosRGB
+    XYZtosRGB,
+    gray
 }
 
-},{"./lin.js":7,"./rgb.js":9,"./valuetype.js":13}],11:[function(require,module,exports){
+},{"./lin.js":7,"./rgb.js":9,"./util.js":14}],11:[function(require,module,exports){
 'use strict';
 const { dim } = require('./lin');
-const { zeros, bankRound, isPowerOfTwo } = require('./valuetype');
+const { zeros, bankRound, isPowerOfTwo } = require('./util');
 
 const displayRefA = 1;
 const audioRefA = 0.00001;
@@ -2060,153 +2231,192 @@ module.exports = {
     multiplyFreq,
     divideFreq
 }
-},{"./lin":7,"./valuetype":13}],12:[function(require,module,exports){
-const { is8BitInt, inUnitInterval } = require('./valuetype.js');
-const { multiply } = require('./lin.js');
-const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
-
-//This matrix is used to convert linearized sRGB color to its corresponding color
-//in the XYZ colorspace. The XYZ color is the matrix product of the 
-//linearized sRGB color vector and the conversion matrix. 
-const sRGBtoXYZMatrix = [
-    [0.41239079926595923, 0.35758433938387785, 0.1804807884018343],
-    [0.21263900587151022, 0.7151686787677557, 0.07219231536073371],
-    [0.019330818715591835,0.11919477979462596, 0.9505321522496606]
-]
-
-const XYZtosRGBMatrix = [
-    [3.2404542, -1.5371385, -0.4985314],
-    [-0.9692660,  1.8760108,  0.0415560],
-    [0.0556434, -0.2040259,  1.0572252]
-]
-
-//Coordinates of sRGB red green and blue primary colors in linearized 3D space. 
-const primaryChromaticityCoordinates = {
-    matrix : [
-        [0.64, 0.33, 0.03],
-        [0.30, 0.60, 0.10],
-        [0.15, 0.06, 0.79]
-    ],
-    obj : {
-        r : {
-            x : 0.64,
-            y : 0.33,
-            z : 0.03
-        },
-        g : {
-            x : 0.30,
-            y : 0.60,
-            z : 0.10
-        },
-        b : {
-            x : 0.15,
-            y : 0.06,
-            z : 0.79
+},{"./lin":7,"./util":14}],12:[function(require,module,exports){
+arguments[4][10][0].apply(exports,arguments)
+},{"./lin.js":7,"./rgb.js":9,"./util.js":14,"dup":10}],13:[function(require,module,exports){
+'use strict';
+function isShape(shape) {
+    if (!Array.isArray(shape)) return false;
+    if (shape.length > 1) {
+        for (let i = 0; i <= shape.length; i++) {
+            if (!Number.isInteger(shape[i])) return false;
         }
     }
+    return true;
 }
-
-//Chromaticity Coordinates of sRGB reference white (CIE Illuminant D65) in linear 3D space.
-const whitepointChroma = {
-    matrix : [0.3127, 0.3290, 0.3583],
-    obj : {
-        x : 0.3127,
-        y : 0.3290,
-        z : 0.3583
-    }
+function sizeFrom(shape) {
+    return shape.reduce((acc, curr) => acc * curr);
 }
-
-//Given a linearized sRGB color, calculates the Relative Luminence of the color. 
-//Relative Luminence is the Y stimulus in the XYZ colorspace.
-const relativeLuminence = createRGBRelativeLuminance(sRGBtoXYZMatrix);
-
-//Linearizes sRGB gamma-encoded color channel value in unit interval by applying
-// sRGGB gamma decoding step-function. Value returned is in unit interval. 
-function decodeGammaUI(stimulus) {
-    if (stimulus < 0.04045) {
-        return stimulus / 12.92;
+function stridesFrom(shape) {
+    let rank = shape.length,
+        strides = [];
+        strides[rank - 1] = 1;
+        for (let i = rank - 2; i >= 0; i--) {
+            strides[i] = strides[i + 1] * shape[i + 1];
+        }
+        return strides;
+}
+function createNestedArray(flat, shape, start) {
+    let nest = [],
+        dim = shape[0];
+    if (shape.length === 1) {
+        for (let i = 0; i < dim; i++) {
+            nest[i] = flat[start + i];
+        }
     } else {
-        return Math.pow(((stimulus + 0.055) / 1.055), 2.4);
+        
+        for (let i = 0; i < dim; i++) {
+            let remainDim = shape.slice(1),
+                stride = remainDim.reduce((acc, curr) => acc * curr);
+            nest.push(createNestedArray(flat, remainDim, start + i * stride));
+        }
     }
+    return nest;
 }
 
-//Linearizes sRGB gamma-encoded  8bit color channel value by applying
-// sRGB gamma decoding step function. Value returned is in unit interval.
-function decodeGamma8Bit(colorChannel) {
-    let uiCC = colorChannel / 255;
-    return decodeGammaUI(uiCC);
+function toNestedArray(flat, shape) {
+    if (shape.length === 0) return flat[0];
+    let size = sizeFrom(shape);
+    if (size !== flat.length) throw new Error("Shape does not match the input length");
+    if (size === 0) return [];
+    return createNestedArray(flat, shape, 0);
 }
 
-//From linear stimulus in unit Interval applies sRGB piecewise gamma encoding function .
-// Returned value is in Unit Interval.
-function encodeGammaUI(linStim) {
-    if (linStim < 0.00313080495) {
-        return linStim * 12.92;
-    } else {
-        return Math.pow(linStim, 1 / 2.4) * 1.055 - 0.055;
+const Tensor = (function() {
+    function Tensor(shape, data) {
+        if(!isShape) {
+            throw new TypeError("Shape is not proper type. Shape should be an array of integers");
+        }
+        this.shape = shape;
+        this.size = sizeFrom(shape);
+        this.strides = stridesFrom(shape);
+        this.data = data;
+        this.rank = shape.length;
     }
-}
+    const $T = Tensor.prototype;
+    $T.toNestedArray = function() {
+        return toNestedArray(this.data, this.shape);
+    }
+    $T.coordsToIndex = function(coords) {
+        let index = 0;
+        if (this.rank === 0) return index;
+        for (let i = 0; i < this.rank; i++) {
+            index += this.strides[i] * coords[i];
+        }
+        if (index >= this.size || index > 0) throw new Error("Index out of range");
+        return index;
+    }
+    $T.indexToCoords = function(index) {
+        let coords = [];
+        for (let i = 0; i < this.rank - 1; i++) {
+            coords[i] = Math.floor(index / this.strides[i]);
+            index -= coords[i] * this.strides[i];
+        }
+        coords[coords.length - 1] = index;
+        return coords;
+    }
+    $T.get = function(location) {
+        if (Number.isInteger(location)) {
+            if (location >= this.size || location < 0) throw new Error("Index out of range");
+            return this.data[location];
+        } 
+        if (!Array.isArray(location)) {
+            throw new Error("Location is neither a data index nor a coordinate");
+        }
+        return this.data[this.coordsToIndex()];
+    }
+    $T.set = function(location, value) {
+        if (Number.isInteger(location)) {
+            if (location >= this.size || location < 0) throw new Error("Index out of range");
+            this.data[location] = value;
+        } else if (!Array.isArray(location)) {
+            throw new Error("Location is neither a data index nor a coordinate.");
+        } else {
+            this.data[this.coordsToIndex(location)] = value;
+        }
+    }
+    function padHelper(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padVals) {
+        for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
+            padded[pInd++] = padVals[0];
+        }
+        console.log("before index " + pInd);
+        console.log(padded);
+        //Base Case: If this is the final dimension of original shape, add the original data
+        if (oShape.length === 1) {  
+            for (let c = 0; c < oShape[0]; c++) {
+                if (padBefore.length > 1) {
+                    for (let b = 0; b < padBefore[1]; b++) {
+                        padded[oIndex++] = padVals[0];
+                    }
+                }
+                padded[pInd++] = orig[oIndex++];
+                if (padAfter.length > 1) {
+                    for (let a = 0; a < padAfter[1]; a++) {
+                        padded[oIndex++] = padVals[0];
+                    }
+                }
+            }
+        } else {
+            for (let c = 0; c < oShape[0]; c++) {
+                let indices = padHelper(
+                    orig, oShape.slice(1), oIndex,
+                    padded, pStrides.slice(1), pInd,
+                    padAfter.slice(1), padBefore.slice(1), padVals.slice(1)
+                );
+                oIndex = indices[0];
+                pInd = indices[1];
+            }
+        }
+        console.log("after Index start " + pInd)
+        console.log(padded);
+        for (let a = 0; a < padAfter[0] * pStrides[0]; a++) {
+            padded[pInd++] = padVals[0];
+        }
+        return [oIndex, pInd];
+    }
+    $T.pad = function(padAfter, padBefore, padVals, inplace=true) {
+        if (padAfter.length !== padBefore.length) {
+            throw new Error("List of padding before each dimension " + padBefore.length +
+             " and list of padding after each dimension " + padAfter.length + "do not match");
+        }
+        let newRank = padAfter.length > this.rank ? padAfter.length : this.rank;
+        let newShape = [],
+            newData = [];
+        for (let dim = 0; dim < newRank; dim++) {
+            let before = dim >= padBefore ? 0 : padBefore[dim],
+                after = dim >= padAfter ? 0 : padAfter[dim],
+                curr = dim >= this.rank ? 1 : this.shape[dim];
+            newShape[dim] = curr + before + after;
+        }
+        console.log(newShape);
+        let newStrides = stridesFrom(newShape);
+        console.log(newStrides);
+        padHelper(this.data, this.shape, 0, newData, newStrides, 0, padAfter, padBefore, padVals);
+        
+        if (inplace) {
+            this.data = newData;
+            this.shape = newShape;
+            this.strides = newStrides;
+            this.rank = newRank;
+        }
 
-//From linear stimulus in unit interval applies sRGB piecewise gamma encoding function .
-// Returned value is 8Bit Integer.
-function encodeGamma8Bit(linStim) {
-    let uiCC = encodeGammaUI(linStim);
-    return Math.round(uiCC * 255); 
-}
-
-//Converts sRGB color to XYZ colorspace.
-function sRGBtoXYZ(rgb) {
-    let linRGB = linearize8Bit(rgb);
-    return multiply(sRGBtoXYZMatrix, linRGB);
-}
-//Linearizes the 8Bit color channels of a gamm-encoded sRGB color.
-function linearize8Bit(rgb) {
-    return rgb.map(cc => decodeGamma8Bit(cc));
-}
-//Gamma-encodes each color channel of a linear sRGB color to 8Bit values.
-function delinearize8Bit(rgb) {
-    return rgb.map(cc => encodeGamma8Bit(cc));
-}
-//Converts XYZ color to Gamma-encoded sRGB
-function XYZtosRGB(xyz) {
-    let linRGB = multiply(XYZtosRGBMatrix, xyz);
-    return delinearize8Bit(linRGB);
-}
-
-//Creates gray sRGB color from gray value between 0 and 256. 
-//Set a to true if an RGBA output is desired.
-function gray(gVal, a=false) {
-    return a ? RGBA.color(gVal, gVal, gVal) : RGBA.color(gVal, gVal, gVal);
-}
-//Not a proper luma conversion for sRGB, 
-//relies on primaries and white point in NTSC color spaces like YIQ an YUV
-// function lumaCCIR601(rPrime, gPrime, bPrime) {
-//     let YPrime = 0.299 * rPrime + 0.587 * gPrime + 0.114 * bPrime;
-//     return YPrime;
-// }
-
-//Again not a proper luma function for sRGB, output should be luma values between 16 and 235
-//This function produces values from 0 to 255 which must be clamped.
-// function lumaBT709(rPrime, gPrime, bPrime) {
-//     let luma = 0.2126 * rPrime + 0.7152 * gPrime + 0.0722 * bPrime;
-//     return luma;
-// }
+        return newData;
+    }
+    $T.incrementIndex = function(index, dimIncs) {
+        if (this.rank === 0) return index;
+        for (let i = 0; i < dimIncs; i++) {
+            index += this.strides[i] * dimIncs[i];
+        }
+        return index;
+    }
+    return Tensor;
+})();
 
 module.exports = {
-    decodeGammaUI,
-    decodeGamma8Bit,
-    encodeGammaUI,
-    encodeGamma8Bit,
-    linearize8Bit,
-    'primaryChroma' : primaryChromaticityCoordinates.matrix,
-    'whitepointChroma' : whitepointChroma.matrix,
-    relativeLuminence,
-    sRGBtoXYZ,
-    XYZtosRGB,
-    gray
+    Tensor
 }
 
-},{"./lin.js":7,"./rgb.js":9,"./valuetype.js":13}],13:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 function is8BitInt(value) {
     return (!isNaN(channelValue)
         && Number.isInteger(+channelValue)

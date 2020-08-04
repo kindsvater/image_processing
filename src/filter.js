@@ -1,4 +1,4 @@
-const { zeros, initialize, round } = require("./valuetype");
+const { zeros, initialize, round } = require("./util");
 
 const impulse = {
     "delta" : (n=16, shift=0, scale=1) => { 

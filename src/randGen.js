@@ -1,4 +1,4 @@
-const { clampTo } = require('./valuetype.js');
+const { clampTo } = require('./util.js');
 //Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
 //probabilities of two outcomes. Probability in excess of a is distributed evenly 
 //using a RobinHood algorithm. Returns arrays K and V where K is indices of

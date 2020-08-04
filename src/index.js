@@ -1,14 +1,14 @@
 const { ImageReader } = require('./ImageReader.js');
-const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage } = require('./imageProcessing');
+const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageProcessing');
 const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
 const { gaussGray } = require('./randGen');
-const { zeros, round } = require('./valuetype');
+const { zeros, round } = require('./util');
 const { randIntArray } = require('./randGen');
 const { extendRealFreqDomain, FFT, inverseFFT } = require('./signal');
 const { impulse, psf } = require('./filter');
-
+const { Tensor } = require('./tensor');
 // function checkFFT() {
 //     let r = randIntArray(0, 10, 32);
 //     let i = zeros(32);
@@ -32,6 +32,13 @@ const timestep = 30;
 img.src = 'img/flowers.jpg';
 img.onload = function() {
     //checkFFT();
+    let data = [1,2,3,4,5,6,7,8,9];
+    console.log(data);
+    let tt = new Tensor([3,3], data);
+    console.log(tt);
+    tt.pad([1,1, 1], [1,1,1], [0,0,0]);
+    console.log(tt.data);
+    console.log(tt.toNestedArray());
     console.log(psf.gauss(5, 5, 1));
     let canvas = document.getElementById("manip");
     let context = canvas.getContext('2d');
@@ -71,7 +78,9 @@ img.onload = function() {
     //     contextData.data.set(rImageData);
     //     context.putImageData(contextData, 0, 0); 
     // })
-    let grays = gaussGray((512, 512), 32);
+    let pw = 3;
+    let grays = gaussGray(pw * pw, 32);
+    
     console.log(grays.length)
     let hist = [];
     for (let m = 0; m < 256; m++) {
@@ -81,7 +90,7 @@ img.onload = function() {
         hist[grays[g]] += 1;
     }
 
-    let data = [];
+    data = [];
     for (let i = 0; i < hist.length; i++) {
         data.push({name: i, value: hist[i] / grays.length})
     }
@@ -90,11 +99,12 @@ img.onload = function() {
     for (let g = 0; g < grays.length; g++) {
         grayImg.push(grays[g], grays[g], grays[g], 255);
     }
+    console.log(padRealImage(gray, pw, 4, 6, 6));
     console.log(grayImg);
     console.log("Fourier");
-    let { ReX, ImX } = FFT2DFromRealImage(grayImg, 512, 4, true);
+    let { ReX, ImX } = FFT2DFromRealImage(grayImg, pw, 4, true);
     console.log(ReX);
-    inverseFFT2DImage(ReX, ImX, 4, 512);
+    inverseFFT2DImage(ReX, ImX, 4, pw);
     console.log(ReX)
     contextData.data.set(new Uint8ClampedArray(grayImg));
     context.putImageData(contextData, 0, 0); 

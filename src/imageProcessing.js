@@ -1,7 +1,8 @@
+'use strict';
 const { RGB, RGBA } = require('./RGB');
 const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./sRGB');
 const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie');
-const { bankRound, zeros, isPowerOfTwo } = require('./valuetype');
+const { bankRound, zeros, isPowerOfTwo } = require('./util');
 const { ImageReader } = require('./ImageReader.js');
 const { convolveComplex } = require('./signal.js');
 
@@ -239,8 +240,6 @@ function FFT1DImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
     }
 }
 
-
-
 function FFT2DFromComplexImage(ReX, ImX, chans, pWidth) {
     let ccTotal = ReX.length;
     if (ccTotal !== ImX.length) throw new Error("Complex Image Component lengths do not match.");
@@ -301,6 +300,203 @@ function inverseFFT2DImage(ReX, ImX, chans, pWidth) {
     return { ReX, ImX };
 }
 
+// function multiplyFreqImage(ReX, ImX, ReH, ImH, chans, inPlace=false) {
+//     let min = 0;
+//     let max = 
+//     if (!max) max = ReX.length;
+//     let ReY = inPlace ? ReX : [],
+//         ImY = inPlace ? ImX : [];
+
+//     if (inPlace) {
+//         let temp;
+//         for (let i = min; i < max; i++) {
+//             temp = ReX[i] * ReH[i] - ImX[i] * ImH[i]; 
+//             ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+//             ReY[i] = temp;
+//         }
+//     } else {
+//         for (let i = min; i < max; i++) {
+//             ReY[i] = ReX[i] * ReH[i] - ImX[i] * ImH[i];
+//             ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+//         }
+//     }
+//     return { "ReX" : ReY, "ImX" : ImY }
+// }
+
+function padComplexImage(ReX, ImX, pWidth, chans, toWidth, toHeight) {
+    let ccTotal = ReX.length;
+    if (ccTotal !== ImX.length) throw new Error("Complex Image Component lengths do not match");
+    let pHeight = ccTotal / pWidth / chans,
+        newCCTotal = chans * toWidth * toHeight,
+        newRows = toHeight - pHeight,
+        newCols = toWidth - pWidth;
+    
+    //Add new rows to end of array
+    let endZeros = newRows * (pWidth + newCols) * chans;
+    for (let z = 1; z <= endZeros; z++) {
+        ReX[newCCTotal - z] = 0;
+        ImX[newCCTotal - z] = 0;
+    }
+    //Move over each former row by the column padding amount, starting with last.
+    let endIndex = newCCTotal - endZeros - 1;
+    let colZeros = newCols * chans;
+    for (let r = pHeight; r > 0; r--) {
+        for (let z = 1; z <= colZeros; z++) {
+            ReX[endIndex] = 0;
+            ImX[endIndex] = 0;
+            endIndex--;
+        }
+        let origRowEndIndex = r * chans * pWidth - 1;
+        for (let c = 0; c < pWidth * chans; c++) {
+            ReX[endIndex] = ReX[origRowEndIndex - c];
+            ImX[endIndex] = ImX[origRowEndIndex - c];
+            endIndex--;
+        }
+    }
+    return ReX, ImX;
+}
+
+function padRealImage(img, pWidth, chans, toWidth, toHeight) {
+    let ccTotal = img.length;
+    
+    let pHeight = ccTotal / pWidth / chans,
+        newCCTotal = chans * toWidth * toHeight,
+        newRows = toHeight - pHeight,
+        newCols = toWidth - pWidth;
+    
+    //Add new rows to end of array
+    let endZeros = newRows * (pWidth + newCols) * chans;
+    for (let z = 1; z <= endZeros; z++) {
+        img[newCCTotal - z] = 0;
+    }
+    //Move over each former row by the column padding amount, starting with last.
+    let endIndex = newCCTotal - endZeros - 1;
+    let colZeros = newCols * chans;
+
+    for (let r = pHeight; r > 0; r--) {
+        for (let z = 1; z <= colZeros; z++) {
+            img[endIndex] = 0;
+            endIndex--;
+        }
+        let origRowEndIndex = r * chans * pWidth - 1;
+        for (let c = 0; c < pWidth * chans; c++) {
+            img[endIndex] = img[origRowEndIndex - c];
+            endIndex--;
+        }
+    }
+    return img;
+}
+
+function depadRealImage(img, pWidth, chans, minusWidth, minusHeight) {
+    let ccTotal = img.length;
+    let pHeight = ccTotal / pWidth / chans,
+        newRows = pHeight - minusHeight;
+        newCols = pWidth - minusWidth,
+        endIndex = newCols * chans;
+        colChansRmv = minusWidth * chans;
+        currIndex = endIndex + colChansRmv;
+        for (let r = 1; r < newRows; r++) {
+            let sectionLen = newCols * chans;
+            for (let c = 0; c < sectionLen; c++) {
+                img[endIndex] = img[currIndex];
+                endIndex++;
+                currIndex++;
+            }
+            currIndex += colChansRmv;
+        }
+        img.splice(endIndex);
+        return img;
+}
+
+function convolveRealImage(img, imgWidth, imgChans, psf, psfWidth, edge="mirror") {
+    let output = [];
+        ccTotal = img.length,
+        imgHeight = ccTotal / imgWidth / imgChans,
+        psfHeight = psf.length / psfWidth,
+        finalHeight = imgHeight + psfHeight - 1,
+        finalWidth = imgWidth + psfWidth - 1,
+        leftRadius = Math.ceil(psfWidth / 2) - 1, //5 = 2 4 = 1
+        rightRadius = psfWidth - leftRadius - 1, //5 = 2; 4 = 2;
+        topRadius = Math.ceil(psfHeight / 2) - 1,
+        bottomRadius = psfHeight - topRadius - 1,
+        // cntrRI= leftRadius,
+        // cntrCI = rightRadius,
+        currIndex = 0;
+
+    for (let r = 0; r < imgHeight; r++) {
+        for (let c = 0; c < imgWidth; c++) {
+            let sum = 0,
+                subC = 0,
+                subR = 0,
+                totalSub;
+
+            //calculate submerged columns and rows;
+            if (c < leftRadius) subC = leftRadius - c;
+            else if (imgWidth - c <= rightRadius) subC = rightRadius - (imgWidth - c - 1);
+            if (r < topRadius) subR = topRadius - r;
+            else if (imgHeight - r <= bottomRadius) subR = bottomRadius - (imgHeight - r - 1);
+            
+            if (!subR || !subC) {
+                switch(edge) {
+                    case "mirror" : 
+                        wrapRInd = imgHeight - r - 1;
+                        break;
+                    case "pad" : 
+                        val = 0;
+                        break;
+                    case "correct" :
+                        //divide by immersed pixels;
+                        break;
+                }
+            } else {
+                for (let pr = -topRadius; pr <= bottomRadius; pr++) {
+                    for (let pc = -leftRadius; pc <= rightRadius; pc++) {
+                        //sum += img[((r * imgWidth) + c) * chans] * 
+                        
+                    }
+    
+                }
+            }
+        }
+    }
+
+    for (let r = -topRadius; r < imgHeight - topRadius; r++) {
+        for (let c = -leftRadius; c < imgWidth - leftRadius; c++) {
+            let sum = 0,
+                subC = 0,
+                subR = 0,
+                totalSub;
+
+            //calculate submerged columns and rows;
+            if (c < 0) subC = 0 - c;
+            else if (c + psfWidth - 1 >= imgWidth) subC = psfWidth - imgWidth + c;
+            if (r < 0) subR = 0 - r;
+            else if (r + psfHeight - 1 >= imgHeight) subR = psfHeight - imgHeight + r;
+            
+            if (!subR || !subC) {
+                switch(edge) {
+                    case "mirror" : 
+                        wrapRInd = imgHeight - r - 1;
+                        break;
+                    case "pad" : 
+                        val = 0;
+                        break;
+                    case "correct" :
+                        //divide by immersed pixels;
+                        break;
+                }
+            } else {
+                for (let pr = 0; pr < psfHeight; pr++) {
+                    for (let pc = 0; pc < psfWidth; pc++) {
+                        //sum += psf[]
+                        
+                    }
+                }
+            }
+            //output[row col] = 
+        }
+    }
+}
 module.exports = {
     histogram,
     cdf,
@@ -308,5 +504,7 @@ module.exports = {
     equalizeImgLight,
     FFT2DFromRealImage,
     inverseFFT2DImage,
-    FFT1DImage
+    FFT1DImage,
+    padRealImage,
+    padComplexImage,
 }

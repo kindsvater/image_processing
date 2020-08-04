@@ -1,4 +1,4 @@
-const { inNormalUI, clampTo } =  require('./valuetype.js');
+const { inNormalUI, clampTo } =  require('./util.js');
 
 //Device Invariant Representation of Color. The tristimulus values X, Y, and Z technically
 // range from 0.0000 to infinity, but never exceed 1.2000 in practice. 
