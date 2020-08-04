@@ -2339,22 +2339,25 @@ const Tensor = (function() {
         for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
             padded[pInd++] = padVals[0];
         }
-        console.log("before index " + pInd);
+        console.log("before index " + oShape[0]);
         console.log(padded);
         //Base Case: If this is the final dimension of original shape, add the original data
         if (oShape.length === 1) {  
             for (let c = 0; c < oShape[0]; c++) {
+                console.log(padBefore[1]);
                 if (padBefore.length > 1) {
                     for (let b = 0; b < padBefore[1]; b++) {
-                        padded[oIndex++] = padVals[0];
+                        console.log("addingZero");
+                        padded[pInd++] = padVals[0];
                     }
                 }
                 padded[pInd++] = orig[oIndex++];
                 if (padAfter.length > 1) {
                     for (let a = 0; a < padAfter[1]; a++) {
-                        padded[oIndex++] = padVals[0];
+                        padded[pInd++] = padVals[0];
                     }
                 }
+                console.log(padded);
             }
         } else {
             for (let c = 0; c < oShape[0]; c++) {
@@ -2388,9 +2391,9 @@ const Tensor = (function() {
                 curr = dim >= this.rank ? 1 : this.shape[dim];
             newShape[dim] = curr + before + after;
         }
-        console.log(newShape);
+        console.log("New Shape" + newShape);
         let newStrides = stridesFrom(newShape);
-        console.log(newStrides);
+        console.log("New Strides " + newStrides);
         padHelper(this.data, this.shape, 0, newData, newStrides, 0, padAfter, padBefore, padVals);
         
         if (inplace) {
