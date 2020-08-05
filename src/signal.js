@@ -1,5 +1,5 @@
 'use strict';
-const { dim } = require('./lin');
+const { dim } = require('./linear');
 const { zeros, bankRound, isPowerOfTwo } = require('./util');
 
 const displayRefA = 1;

@@ -2,8 +2,9 @@
 const { RGB, RGBA } = require('./rgb');
 const { relativeLuminence, linearize8Bit } = require('./srgb');
 const { lightness } = require('./cie');
+const Tensor = require('./tensor');
 
-const ImageReader = (function() {
+const Image = (function() {
     function ImageReader(img, width, a) {
         this.img = img;
         this.colorIdx = 0;
@@ -12,16 +13,17 @@ const ImageReader = (function() {
         this.tupleSize = a ? 4 : 3;
         this.lightVector; //maybe choose object so you can cache different ranges?/
     }
-    ImageReader.prototype.areValidIndices = function(rowI, colI) {
+    const $IR = ImageReader.prototype;
+    $IR.areValidIndices = function(rowI, colI) {
         if (rowI >= this.heightRes) throw new Error("Row index " + rowI + " is out of bounds.");
         if (colI >= this.widthRes) throw new Error("Columnindex " + colI + " is our of bound.");
         return true;
     }
-    ImageReader.prototype.flatPixelIndex = function(rowI, colI) {
+    $IR.flatPixelIndex = function(rowI, colI) {
         areValidIndices(rowI, colI);
         return (rowI * this.widthRes * this.tupleSize) + (colI * this.tupleSize);
     } 
-    ImageReader.prototype.nextColor = function(a=false) {
+    $IR.nextColor = function(a=false) {
         let color;
         if (a) {
             color = RGBA.color(
@@ -36,7 +38,7 @@ const ImageReader = (function() {
         this.colorIdx += this.tupleSize;
         return color;
     } 
-    ImageReader.prototype.eachColor = function(cb, a=false) {
+    $IR.eachColor = function(cb, a=false) {
         while(this.hasNextColor()) {
             let curr = this.colorIdx;
             let cont = cb(this.nextColor(a), curr);
@@ -44,10 +46,10 @@ const ImageReader = (function() {
         }
         return;
     }
-    ImageReader.prototype.hasNextColor = function() {
+    $IR.hasNextColor = function() {
         return this.colorIdx < this.img.length;
     }
-    ImageReader.prototype.toPixels = function(a=false) {
+    $IR.toPixels = function(a=false) {
         //if (this.pixels) return this.pixels; could add caching
         let pixelVector = [];
         this.eachColor((color) => {
@@ -57,7 +59,7 @@ const ImageReader = (function() {
         //this.pixels = pixelVector;
         return pixelVector;
     }
-    ImageReader.prototype.toLightness = function(range=255) {
+    $IR.toLightness = function(range=255) {
         //if (this.lightVector) ) Cache and also check range;
         let LVector = [];
         this.eachColor((color) => {
@@ -70,7 +72,7 @@ const ImageReader = (function() {
         this.reset();
         return LVector;
     }
-    ImageReader.prototype.getLightIdxs = function(range=255) {
+    $IR.getLightIdxs = function(range=255) {
         let lVec = this.lightVector ? this.lightVector : this.toLightness(range);
         let lightIdxs = [];
         for (let m = 0; m < lVec.length; m++) {
@@ -81,19 +83,19 @@ const ImageReader = (function() {
         }
         return lightIdxs;
     }
-    ImageReader.prototype.reset = function() {
+    $IR.reset = function() {
         this.colorIdx = 0;
     }
-    ImageReader.prototype.redChannelAt = function(rowI, colI) {
+    $IR.redChannelAt = function(rowI, colI) {
         return this.img[this.flatPixelIndex(rowI, colI)];
     }
-    ImageReader.prototype.greenChannelAt = function(rowI, colI) {
+    $IR.greenChannelAt = function(rowI, colI) {
         return this.img[this.flatPixelIndex(rowI, colI) + 1];
     }
-    ImageReader.prototype.blueChannelAt = function(rowI, colI) {
+    $IR.blueChannelAt = function(rowI, colI) {
         return this.img[this.flatPixelIndex(rowI, colI) + 2];
     }
-    ImageReader.prototype.pixelAt = function(rowI, colI) {
+    $IR.pixelAt = function(rowI, colI) {
         let pixelI = this.flatPixelIndex(rowI, colI);
         return RGB.color(this.img[pixelI], this.img[pixelI + 1], this.img[pixelI + 2]);
     }
@@ -119,16 +121,16 @@ const ImageReader = (function() {
             return cc;
         }
     } 
-    ImageReader.prototype.getRedChannel = function(flat) {
+    $IR.getRedChannel = function(flat) {
         return getChannel(this.img, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
     }
-    ImageReader.prototype.getGreenChannel = function(flat) {
+    $IR.getGreenChannel = function(flat) {
         return getChannel(this.img, this.heightRes, this.widthRes, 1, this.tupleSize)(flat);
     }
-    ImageReader.prototype.getBlueChannel = function(flat) {
+    $IR.getBlueChannel = function(flat) {
         return getChannel(this.img, this.heightRes, this.widthRes, 2, this.tupleSize)(flat);
     }
-    ImageReader.prototype.getAlphaChannel = function(flat) {
+    $IR.getAlphaChannel = function(flat) {
         if (this.tupleSize !== 4) {
             return null;
         }
@@ -140,7 +142,7 @@ const ImageReader = (function() {
 module.exports = {
     ImageReader
 }
-},{"./cie":3,"./rgb":9,"./srgb":12}],2:[function(require,module,exports){
+},{"./cie":3,"./rgb":10,"./srgb":13,"./tensor":14}],2:[function(require,module,exports){
 const { invert, dot } = require('./lin.js');
 const redLevel = (rgbColor) => rgbColor[0];
 const greenLevel = (rgbColor) => rgbColor[1];
@@ -182,7 +184,7 @@ function rgbWhiteToXYZ(whiteCoords) {
 rgb.createRGBRelativeLuminance = (XYZconversionMatrix) =>
     rgb => dot([redLevel(rgb), greenLevel(rgb), blueLevel(rgb)], XYZconversionMatrix[1]);
 
-},{"./lin.js":7}],3:[function(require,module,exports){
+},{"./lin.js":8}],3:[function(require,module,exports){
 const { inNormalUI, clampTo } =  require('./util.js');
 
 //Device Invariant Representation of Color. The tristimulus values X, Y, and Z technically
@@ -337,7 +339,7 @@ module.exports = {
     XYZ,
 }
 
-},{"./util.js":14}],4:[function(require,module,exports){
+},{"./util.js":15}],4:[function(require,module,exports){
 const { zeros, initialize, round } = require("./util");
 
 const impulse = {
@@ -419,13 +421,157 @@ module.exports = {
     impulse,
     psf
 }
-},{"./util":14}],5:[function(require,module,exports){
+},{"./util":15}],5:[function(require,module,exports){
+const { RGB, RGBA } = require('./rgb');
+const { relativeLuminence, linearize8Bit } = require('./srgb');
+const { lightness } = require('./cie');
+const { Tensor } = require('./tensor');
+
+const Image = (function() {
+    function ImageReader(img, width, a) {
+        this.img = img;
+        this.colorIdx = 0;
+        this.widthRes = width;
+        this.heightRes = img.length / width / (a ? 4 : 3);
+        this.tupleSize = a ? 4 : 3;
+        this.lightVector; //maybe choose object so you can cache different ranges?/
+    }
+    const $IR = ImageReader.prototype;
+    $IR.areValidIndices = function(rowI, colI) {
+        if (rowI >= this.heightRes) throw new Error("Row index " + rowI + " is out of bounds.");
+        if (colI >= this.widthRes) throw new Error("Columnindex " + colI + " is our of bound.");
+        return true;
+    }
+    $IR.flatPixelIndex = function(rowI, colI) {
+        areValidIndices(rowI, colI);
+        return (rowI * this.widthRes * this.tupleSize) + (colI * this.tupleSize);
+    } 
+    $IR.nextColor = function(a=false) {
+        let color;
+        if (a) {
+            color = RGBA.color(
+                this.img[this.colorIdx], this.img[this.colorIdx + 1],
+                this.img[this.colorIdx + 2], this.img[this.colorIdx + 3]
+            );
+        } else {
+            color = RGB.color(
+                this.img[this.colorIdx], this.img[this.colorIdx + 1], this.img[this.colorIdx + 2]
+            );
+        }
+        this.colorIdx += this.tupleSize;
+        return color;
+    } 
+    $IR.eachColor = function(cb, a=false) {
+        while(this.hasNextColor()) {
+            let curr = this.colorIdx;
+            let cont = cb(this.nextColor(a), curr);
+            if (cont === false) break;
+        }
+        return;
+    }
+    $IR.hasNextColor = function() {
+        return this.colorIdx < this.img.length;
+    }
+    $IR.toPixels = function(a=false) {
+        //if (this.pixels) return this.pixels; could add caching
+        let pixelVector = [];
+        this.eachColor((color) => {
+            pixelVector.push(color);
+        });
+        this.reset();
+        //this.pixels = pixelVector;
+        return pixelVector;
+    }
+    $IR.toLightness = function(range=255) {
+        //if (this.lightVector) ) Cache and also check range;
+        let LVector = [];
+        this.eachColor((color) => {
+            LVector.push(
+                Math.round(
+                    (lightness(relativeLuminence(linearize8Bit(color)))) / 100 * range 
+                )
+            );   
+        });
+        this.reset();
+        return LVector;
+    }
+    $IR.getLightIdxs = function(range=255) {
+        let lVec = this.lightVector ? this.lightVector : this.toLightness(range);
+        let lightIdxs = [];
+        for (let m = 0; m < lVec.length; m++) {
+            if (!lightIdxs[lVec[m]]) {
+                lightIdxs[lVec[m]] = [];
+            }
+            lightIdxs[lVec[m]].push(m * this.tupleSize);
+        }
+        return lightIdxs;
+    }
+    $IR.reset = function() {
+        this.colorIdx = 0;
+    }
+    $IR.redChannelAt = function(rowI, colI) {
+        return this.img[this.flatPixelIndex(rowI, colI)];
+    }
+    $IR.greenChannelAt = function(rowI, colI) {
+        return this.img[this.flatPixelIndex(rowI, colI) + 1];
+    }
+    $IR.blueChannelAt = function(rowI, colI) {
+        return this.img[this.flatPixelIndex(rowI, colI) + 2];
+    }
+    $IR.pixelAt = function(rowI, colI) {
+        let pixelI = this.flatPixelIndex(rowI, colI);
+        return RGB.color(this.img[pixelI], this.img[pixelI + 1], this.img[pixelI + 2]);
+    }
+    function getChannel(img, heightRes, widthRes, channel, tupleSize) {
+        return function(flat=true) {
+            let cc = [];
+            let flatIndex = 0;
+            if (flat) {
+                let pi = 0;
+                for (flatIndex = 0; flatIndex < img.length; flatIndex += tupleSize) {
+                    cc[pi] = img[flatIndex + channel];
+                    pi++
+                }
+            } else {
+                for (let r = 0; r < heightRes; r++) {
+                    cc[r] = [];
+                    for (let c = 0; c < widthRes; c++) {
+                        cc[r][c] = img[flatIndex + channel];
+                        flatIndex += tupleSize;
+                    }
+                }
+            }
+            return cc;
+        }
+    } 
+    $IR.getRedChannel = function(flat) {
+        return getChannel(this.img, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
+    }
+    $IR.getGreenChannel = function(flat) {
+        return getChannel(this.img, this.heightRes, this.widthRes, 1, this.tupleSize)(flat);
+    }
+    $IR.getBlueChannel = function(flat) {
+        return getChannel(this.img, this.heightRes, this.widthRes, 2, this.tupleSize)(flat);
+    }
+    $IR.getAlphaChannel = function(flat) {
+        if (this.tupleSize !== 4) {
+            return null;
+        }
+        return getChannel(this.img, this.heightRes, this.widthRes, 3, this.tupleSize)(flat);     
+    }
+    return ImageReader;
+})();
+
+module.exports = {
+    ImageReader
+}
+},{"./cie":3,"./rgb":10,"./srgb":13,"./tensor":14}],6:[function(require,module,exports){
 'use strict';
 const { RGB, RGBA } = require('./RGB');
 const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./sRGB');
 const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie');
 const { bankRound, zeros, isPowerOfTwo } = require('./util');
-const { ImageReader } = require('./ImageReader.js');
+const { ImageReader } = require('./image.js');
 const { convolveComplex } = require('./signal.js');
 
 //Given a flat array of RGB or RGBA image data and a function to calculate a property of a color: creates a 
@@ -930,7 +1076,7 @@ module.exports = {
     padRealImage,
     padComplexImage,
 }
-},{"./ImageReader.js":1,"./RGB":2,"./cie":3,"./sRGB":10,"./signal.js":11,"./util":14}],6:[function(require,module,exports){
+},{"./RGB":2,"./cie":3,"./image.js":5,"./sRGB":11,"./signal.js":12,"./util":15}],7:[function(require,module,exports){
 const { ImageReader } = require('./ImageReader.js');
 const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageProcessing');
 const { RGB, RGBA } = require('./rgb');
@@ -1303,7 +1449,7 @@ function displayHistogram(selector, data, color, height, width) {
     svg.append("g").call(yAxis);
 }
 
-},{"./ImageReader.js":1,"./cie":3,"./filter":4,"./imageProcessing":5,"./randGen":8,"./rgb":9,"./signal":11,"./srgb":12,"./tensor":13,"./util":14}],7:[function(require,module,exports){
+},{"./ImageReader.js":1,"./cie":3,"./filter":4,"./imageProcessing":6,"./randGen":9,"./rgb":10,"./signal":12,"./srgb":13,"./tensor":14,"./util":15}],8:[function(require,module,exports){
 //Calculates and returns the magnitude (spatial length) of a vector.
 const mag = vector => Math.sqrt(vector.reduce((acc, curr) => acc + (curr * curr)));
 //A and B are both N length vectors. Returns the angle in Radians between them.
@@ -1500,7 +1646,7 @@ module.exports = {
     angle,
     cross
 }
-},{}],8:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 const { clampTo } = require('./util.js');
 //Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
 //probabilities of two outcomes. Probability in excess of a is distributed evenly 
@@ -1627,9 +1773,9 @@ module.exports.gaussGray = gaussGray;
 module.exports.randIntArray = randIntArray;
 
 
-},{"./util.js":14}],9:[function(require,module,exports){
+},{"./util.js":15}],10:[function(require,module,exports){
 arguments[4][2][0].apply(exports,arguments)
-},{"./lin.js":7,"dup":2}],10:[function(require,module,exports){
+},{"./lin.js":8,"dup":2}],11:[function(require,module,exports){
 const { is8BitInt, inUnitInterval } = require('./util.js');
 const { multiply } = require('./lin.js');
 const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
@@ -1775,7 +1921,7 @@ module.exports = {
     gray
 }
 
-},{"./lin.js":7,"./rgb.js":9,"./util.js":14}],11:[function(require,module,exports){
+},{"./lin.js":8,"./rgb.js":10,"./util.js":15}],12:[function(require,module,exports){
 'use strict';
 const { dim } = require('./lin');
 const { zeros, bankRound, isPowerOfTwo } = require('./util');
@@ -2231,9 +2377,9 @@ module.exports = {
     multiplyFreq,
     divideFreq
 }
-},{"./lin":7,"./util":14}],12:[function(require,module,exports){
-arguments[4][10][0].apply(exports,arguments)
-},{"./lin.js":7,"./rgb.js":9,"./util.js":14,"dup":10}],13:[function(require,module,exports){
+},{"./lin":8,"./util":15}],13:[function(require,module,exports){
+arguments[4][11][0].apply(exports,arguments)
+},{"./lin.js":8,"./rgb.js":10,"./util.js":15,"dup":11}],14:[function(require,module,exports){
 'use strict';
 function isShape(shape) {
     if (!Array.isArray(shape)) return false;
@@ -2339,15 +2485,12 @@ const Tensor = (function() {
         for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
             padded[pInd++] = padVals[0];
         }
-        console.log("before index " + oShape[0]);
-        console.log(padded);
+        
         //Base Case: If this is the final dimension of original shape, add the original data
         if (oShape.length === 1) {  
-            for (let c = 0; c < oShape[0]; c++) {
-                console.log(padBefore[1]);
+            for (let c = 0; c < oShape[0]; c++) {        
                 if (padBefore.length > 1) {
                     for (let b = 0; b < padBefore[1]; b++) {
-                        console.log("addingZero");
                         padded[pInd++] = padVals[0];
                     }
                 }
@@ -2357,7 +2500,6 @@ const Tensor = (function() {
                         padded[pInd++] = padVals[0];
                     }
                 }
-                console.log(padded);
             }
         } else {
             for (let c = 0; c < oShape[0]; c++) {
@@ -2370,8 +2512,7 @@ const Tensor = (function() {
                 pInd = indices[1];
             }
         }
-        console.log("after Index start " + pInd)
-        console.log(padded);
+
         for (let a = 0; a < padAfter[0] * pStrides[0]; a++) {
             padded[pInd++] = padVals[0];
         }
@@ -2382,18 +2523,19 @@ const Tensor = (function() {
             throw new Error("List of padding before each dimension " + padBefore.length +
              " and list of padding after each dimension " + padAfter.length + "do not match");
         }
-        let newRank = padAfter.length > this.rank ? padAfter.length : this.rank;
-        let newShape = [],
-            newData = [];
+        let newRank = padAfter.length > this.rank ? padAfter.length : this.rank,
+            newShape = [],
+            newData = [],
+            newStrides;
+
         for (let dim = 0; dim < newRank; dim++) {
             let before = dim >= padBefore ? 0 : padBefore[dim],
                 after = dim >= padAfter ? 0 : padAfter[dim],
                 curr = dim >= this.rank ? 1 : this.shape[dim];
             newShape[dim] = curr + before + after;
         }
-        console.log("New Shape" + newShape);
-        let newStrides = stridesFrom(newShape);
-        console.log("New Strides " + newStrides);
+        newStrides = stridesFrom(newShape);
+
         padHelper(this.data, this.shape, 0, newData, newStrides, 0, padAfter, padBefore, padVals);
         
         if (inplace) {
@@ -2419,7 +2561,7 @@ module.exports = {
     Tensor
 }
 
-},{}],14:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 function is8BitInt(value) {
     return (!isNaN(channelValue)
         && Number.isInteger(+channelValue)
@@ -2495,4 +2637,4 @@ module.exports = {
     round,
     isPowerOfTwo
 }
-},{}]},{},[6]);
+},{}]},{},[7]);

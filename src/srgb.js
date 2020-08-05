@@ -1,5 +1,4 @@
-const { is8BitInt, inUnitInterval } = require('./util.js');
-const { multiply } = require('./lin.js');
+const { multiply } = require('./linear.js');
 const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
 
 //This matrix is used to convert linearized sRGB color to its corresponding color

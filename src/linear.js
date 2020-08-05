@@ -66,7 +66,8 @@ function invert(square) {
     return I;
 }
 
-//Returns the rows and columns of given matrix. If matrix is not valid, returns null.
+//Returns the rows and columns of a Matrix represented as a nested array.
+//If matrix is not well-formed, returns null.
 function dim(matrix) {
     if (Array.isArray(matrix) && matrix.length > 0) {
         let rows = matrix.length;

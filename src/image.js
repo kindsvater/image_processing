@@ -1,8 +1,9 @@
-const { RGB, RGBA } = require('./rgb');
-const { relativeLuminence, linearize8Bit } = require('./srgb');
-const { lightness } = require('./cie');
+const { RGB, RGBA } = require('./rgb.js');
+const { relativeLuminence, linearize8Bit } = require('./srgb.js');
+const { lightness } = require('./cie.js');
+const { Tensor } = require('./tensor.js');
 
-const ImageReader = (function() {
+const Image = (function() {
     function ImageReader(img, width, a) {
         this.img = img;
         this.colorIdx = 0;
@@ -11,16 +12,20 @@ const ImageReader = (function() {
         this.tupleSize = a ? 4 : 3;
         this.lightVector; //maybe choose object so you can cache different ranges?/
     }
-    ImageReader.prototype.areValidIndices = function(rowI, colI) {
+    Image.prototype = Object.create(Tensor.prototype);
+    Image.prototype.constructor = Image;
+    const $IR = Image.prototype;
+
+    $IR.areValidIndices = function(rowI, colI) {
         if (rowI >= this.heightRes) throw new Error("Row index " + rowI + " is out of bounds.");
         if (colI >= this.widthRes) throw new Error("Columnindex " + colI + " is our of bound.");
         return true;
     }
-    ImageReader.prototype.flatPixelIndex = function(rowI, colI) {
+    $IR.flatPixelIndex = function(rowI, colI) {
         areValidIndices(rowI, colI);
         return (rowI * this.widthRes * this.tupleSize) + (colI * this.tupleSize);
     } 
-    ImageReader.prototype.nextColor = function(a=false) {
+    $IR.nextColor = function(a=false) {
         let color;
         if (a) {
             color = RGBA.color(
@@ -35,7 +40,7 @@ const ImageReader = (function() {
         this.colorIdx += this.tupleSize;
         return color;
     } 
-    ImageReader.prototype.eachColor = function(cb, a=false) {
+    $IR.eachColor = function(cb, a=false) {
         while(this.hasNextColor()) {
             let curr = this.colorIdx;
             let cont = cb(this.nextColor(a), curr);
@@ -43,10 +48,10 @@ const ImageReader = (function() {
         }
         return;
     }
-    ImageReader.prototype.hasNextColor = function() {
+    $IR.hasNextColor = function() {
         return this.colorIdx < this.img.length;
     }
-    ImageReader.prototype.toPixels = function(a=false) {
+    $IR.toPixels = function(a=false) {
         //if (this.pixels) return this.pixels; could add caching
         let pixelVector = [];
         this.eachColor((color) => {
@@ -56,7 +61,7 @@ const ImageReader = (function() {
         //this.pixels = pixelVector;
         return pixelVector;
     }
-    ImageReader.prototype.toLightness = function(range=255) {
+    $IR.toLightness = function(range=255) {
         //if (this.lightVector) ) Cache and also check range;
         let LVector = [];
         this.eachColor((color) => {
@@ -69,7 +74,7 @@ const ImageReader = (function() {
         this.reset();
         return LVector;
     }
-    ImageReader.prototype.getLightIdxs = function(range=255) {
+    $IR.getLightIdxs = function(range=255) {
         let lVec = this.lightVector ? this.lightVector : this.toLightness(range);
         let lightIdxs = [];
         for (let m = 0; m < lVec.length; m++) {
@@ -80,19 +85,19 @@ const ImageReader = (function() {
         }
         return lightIdxs;
     }
-    ImageReader.prototype.reset = function() {
+    $IR.reset = function() {
         this.colorIdx = 0;
     }
-    ImageReader.prototype.redChannelAt = function(rowI, colI) {
+    $IR.redChannelAt = function(rowI, colI) {
         return this.img[this.flatPixelIndex(rowI, colI)];
     }
-    ImageReader.prototype.greenChannelAt = function(rowI, colI) {
+    $IR.greenChannelAt = function(rowI, colI) {
         return this.img[this.flatPixelIndex(rowI, colI) + 1];
     }
-    ImageReader.prototype.blueChannelAt = function(rowI, colI) {
+    $IR.blueChannelAt = function(rowI, colI) {
         return this.img[this.flatPixelIndex(rowI, colI) + 2];
     }
-    ImageReader.prototype.pixelAt = function(rowI, colI) {
+    $IR.pixelAt = function(rowI, colI) {
         let pixelI = this.flatPixelIndex(rowI, colI);
         return RGB.color(this.img[pixelI], this.img[pixelI + 1], this.img[pixelI + 2]);
     }
@@ -118,24 +123,24 @@ const ImageReader = (function() {
             return cc;
         }
     } 
-    ImageReader.prototype.getRedChannel = function(flat) {
+    $IR.getRedChannel = function(flat) {
         return getChannel(this.img, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
     }
-    ImageReader.prototype.getGreenChannel = function(flat) {
+    $IR.getGreenChannel = function(flat) {
         return getChannel(this.img, this.heightRes, this.widthRes, 1, this.tupleSize)(flat);
     }
-    ImageReader.prototype.getBlueChannel = function(flat) {
+    $IR.getBlueChannel = function(flat) {
         return getChannel(this.img, this.heightRes, this.widthRes, 2, this.tupleSize)(flat);
     }
-    ImageReader.prototype.getAlphaChannel = function(flat) {
+    $IR.getAlphaChannel = function(flat) {
         if (this.tupleSize !== 4) {
             return null;
         }
         return getChannel(this.img, this.heightRes, this.widthRes, 3, this.tupleSize)(flat);     
     }
-    return ImageReader;
+    return Image;
 })();
 
 module.exports = {
-    ImageReader
+    Image
 }

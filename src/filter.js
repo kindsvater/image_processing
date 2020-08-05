@@ -1,4 +1,4 @@
-const { zeros, initialize, round } = require("./util");
+const { zeros, initialize, roundTo } = require("./util");
 
 const impulse = {
     "delta" : (n=16, shift=0, scale=1) => { 
@@ -34,7 +34,7 @@ const psf = {
             y = Math.ceil(r - (m / 2)); 
             for (let c = 0; c < n; c++) {
                 x = Math.ceil(c - (n / 2));
-                psf[r][c] = round((1 / (2 * Math.PI * scale * scale)) * Math.exp(-((x * x) + (y * y)) / (2 * scale * scale)), 4);
+                psf[r][c] = roundTo((1 / (2 * Math.PI * scale * scale)) * Math.exp(-((x * x) + (y * y)) / (2 * scale * scale)), 4);
             }
         }
         return psf;

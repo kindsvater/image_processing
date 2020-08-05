@@ -1,9 +1,11 @@
 'use strict';
-const { RGB, RGBA } = require('./RGB');
-const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./sRGB');
-const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie');
-const { bankRound, zeros, isPowerOfTwo } = require('./util');
-const { ImageReader } = require('./ImageReader.js');
+const { RGB, RGBA } = require('./rgb.js');
+const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./srgb.js');
+const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie.js');
+const { bankRound } = require('./utility/num_util.js');
+const { zeros } = require('./utility/array_util.js');
+const { isPowerOfTwo } = require('./utility/type_util.js');
+const { ImageReader } = require('./image.js');
 const { convolveComplex } = require('./signal.js');
 
 //Given a flat array of RGB or RGBA image data and a function to calculate a property of a color: creates a 

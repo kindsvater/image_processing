@@ -1,14 +1,15 @@
-const { ImageReader } = require('./ImageReader.js');
-const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageProcessing');
-const { RGB, RGBA } = require('./rgb');
-const { relativeLuminence, linearize8Bit } = require('./srgb');
-const { lightness } = require('./cie');
-const { gaussGray } = require('./randGen');
-const { zeros, round } = require('./util');
-const { randIntArray } = require('./randGen');
-const { extendRealFreqDomain, FFT, inverseFFT } = require('./signal');
-const { impulse, psf } = require('./filter');
-const { Tensor } = require('./tensor');
+const { Image } = require('./image.js');
+const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageProcessing.js');
+const { RGB, RGBA } = require('./rgb.js');
+const { relativeLuminence, linearize8Bit } = require('./srgb.js');
+const { lightness } = require('./cie.js');
+const { gaussGray } = require('./randGen.js');
+const { zeros } = require('./utility/array_util.js');
+const { round } = require('./utility/num_util.js');
+const { randIntArray } = require('./randGen.js');
+const { extendRealFreqDomain, FFT, inverseFFT } = require('./signal.js');
+const { impulse, psf } = require('./filter.js');
+const { Tensor } = require('./tensor.js');
 // function checkFFT() {
 //     let r = randIntArray(0, 10, 32);
 //     let i = zeros(32);
@@ -53,7 +54,7 @@ img.onload = function() {
     let rawImgData = contextData.data;
     console.log("image pix = " + rawImgData.length);
     console.log(rawImgData)
-    let read = new ImageReader(rawImgData, cwidth, true);
+    let read = new Image(rawImgData, cwidth, true);
     // console.log(read.getRedChannel());
     // console.log(read.widthRes);
     // console.log(read.heightRes);
