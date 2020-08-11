@@ -4,16 +4,12 @@ const greenLevel = (rgbColor) => rgbColor[1];
 const blueLevel = (rgbColor) => rgbColor[2];
 const rgb = module.exports
 
-
-const RGB = (function() {
-    
-})
 RGBA = {
-    "color" : (r, g, b, a) => [r, g, b, a ? a : 255],
+    color : (r, g, b, a) => [r, g, b, a ? a : 255],
     redLevel,
     greenLevel,
     blueLevel,
-    "alphaLevel" : (rgbaColor) => rgbaColor[3]
+    alphaLevel : (rgbaColor) => rgbaColor[3]
 } 
 RGB = {
     color : (r, g, b) => [r, g, b],
@@ -21,7 +17,7 @@ RGB = {
     greenLevel,
     blueLevel
 } 
-function averageChannelLevel = (rgbColor) => (rgbColor[0] + rgbColor[1] + rgbColor[2]) / 3;
+let averageChannelLevel = (rgbColor) => (rgbColor[0] + rgbColor[1] + rgbColor[2]) / 3;
 XYZconversionMatrix = (primaryCoords, XYZWhite) => {
     let primXYZ = [
         [primaryCoords[0][0],primaryCoords[1][0], primaryCoords[2][0]],
@@ -40,10 +36,10 @@ function rgbWhiteToXYZ(whiteCoords) {
     return whiteCoords.map( cc => cc / whiteY);
 }
 
-createRGBRelativeLuminance = (XYZconversionMatrix) =>
+let createRGBRelativeLuminance = (XYZconversionMatrix) =>
     rgb => dot([redLevel(rgb), greenLevel(rgb), blueLevel(rgb)], XYZconversionMatrix[1]);
 
-gradient = (start, end, step) => {
+let gradient = (start, end, step) => {
     let grad = [];
 
     for (let i = 0; i < step; i++) {

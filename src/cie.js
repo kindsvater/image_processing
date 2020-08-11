@@ -1,4 +1,5 @@
-const { inNormalUI, clampTo } =  require('./util.js');
+const { clampTo } =  require('./utility/num_util.js');
+const { inNormalUnitInterval } = require('./utility/type_util.js');
 
 //Device Invariant Representation of Color. The tristimulus values X, Y, and Z technically
 // range from 0.0000 to infinity, but never exceed 1.2000 in practice. 
@@ -56,7 +57,7 @@ const LAB = {
         if ( Number.isNaN(L) || Number.isNaN(A) || Number.isNaN(B) ) {
             throw new TypeError("LAB value is NaN. Values provided must be numbers.");
         }
-        if (!inNormalUI(L)) throw new Error( "Lightness value " + L + " must be in range 0 to 100");
+        if (!inNormalUnitInterval(L)) throw new Error( "Lightness value " + L + " must be in range 0 to 100");
         if (!(A >= -128 && A <= 128)) throw new Error("A value " + A + " must be in range -128 to 128 " + L + " " + B);
         if (!(B >= -128 && B <= 128)) throw new Error("A value " + B + " must be in range -128 to 128");
 

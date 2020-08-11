@@ -4,13 +4,13 @@ const { lightness } = require('./cie.js');
 const { Tensor } = require('./tensor.js');
 
 const Image = (function() {
-    function ImageReader(img, width, a) {
-        this.img = img;
+    function Image(img, width, a) {
         this.colorIdx = 0;
-        this.widthRes = width;
-        this.heightRes = img.length / width / (a ? 4 : 3);
+        this.width = width;
+        this.height = img.length / width / (a ? 4 : 3);
         this.tupleSize = a ? 4 : 3;
         this.lightVector; //maybe choose object so you can cache different ranges?/
+        Tensor.call(this, [height, width, a], img);
     }
     Image.prototype = Object.create(Tensor.prototype);
     Image.prototype.constructor = Image;
@@ -29,12 +29,12 @@ const Image = (function() {
         let color;
         if (a) {
             color = RGBA.color(
-                this.img[this.colorIdx], this.img[this.colorIdx + 1],
-                this.img[this.colorIdx + 2], this.img[this.colorIdx + 3]
+                this.data[this.colorIdx], this.data[this.colorIdx + 1],
+                this.data[this.colorIdx + 2], this.data[this.colorIdx + 3]
             );
         } else {
             color = RGB.color(
-                this.img[this.colorIdx], this.img[this.colorIdx + 1], this.img[this.colorIdx + 2]
+                this.data[this.colorIdx], this.data[this.colorIdx + 1], this.data[this.colorIdx + 2]
             );
         }
         this.colorIdx += this.tupleSize;
@@ -49,7 +49,7 @@ const Image = (function() {
         return;
     }
     $IR.hasNextColor = function() {
-        return this.colorIdx < this.img.length;
+        return this.colorIdx < this.data.length;
     }
     $IR.toPixels = function(a=false) {
         //if (this.pixels) return this.pixels; could add caching
@@ -89,17 +89,17 @@ const Image = (function() {
         this.colorIdx = 0;
     }
     $IR.redChannelAt = function(rowI, colI) {
-        return this.img[this.flatPixelIndex(rowI, colI)];
+        return this.data[this.flatPixelIndex(rowI, colI)];
     }
     $IR.greenChannelAt = function(rowI, colI) {
-        return this.img[this.flatPixelIndex(rowI, colI) + 1];
+        return this.data[this.flatPixelIndex(rowI, colI) + 1];
     }
     $IR.blueChannelAt = function(rowI, colI) {
-        return this.img[this.flatPixelIndex(rowI, colI) + 2];
+        return this.data[this.flatPixelIndex(rowI, colI) + 2];
     }
     $IR.pixelAt = function(rowI, colI) {
         let pixelI = this.flatPixelIndex(rowI, colI);
-        return RGB.color(this.img[pixelI], this.img[pixelI + 1], this.img[pixelI + 2]);
+        return RGB.color(this.data[pixelI], this.data[pixelI + 1], this.data[pixelI + 2]);
     }
     function getChannel(img, heightRes, widthRes, channel, tupleSize) {
         return function(flat=true) {
@@ -124,13 +124,13 @@ const Image = (function() {
         }
     } 
     $IR.getRedChannel = function(flat) {
-        return getChannel(this.img, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
+        return getChannel(this.data, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
     }
     $IR.getGreenChannel = function(flat) {
-        return getChannel(this.img, this.heightRes, this.widthRes, 1, this.tupleSize)(flat);
+        return getChannel(this.data, this.heightRes, this.widthRes, 1, this.tupleSize)(flat);
     }
     $IR.getBlueChannel = function(flat) {
-        return getChannel(this.img, this.heightRes, this.widthRes, 2, this.tupleSize)(flat);
+        return getChannel(this.data, this.heightRes, this.widthRes, 2, this.tupleSize)(flat);
     }
     $IR.getAlphaChannel = function(flat) {
         if (this.tupleSize !== 4) {

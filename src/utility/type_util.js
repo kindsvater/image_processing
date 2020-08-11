@@ -14,7 +14,7 @@ function inUnitInterval(value) {
     && value <= 1.0)
 }
 
-function inNormalUI(value, normal=100) {
+function inNormalUnitInterval(value, normal=100) {
     return value >= 0 && value <= normal;
 }
 

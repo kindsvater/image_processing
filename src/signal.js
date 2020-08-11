@@ -1,6 +1,8 @@
 'use strict';
 const { dim } = require('./linear');
-const { zeros, bankRound, isPowerOfTwo } = require('./util');
+const { zeros } = require('./utility/array_util.js');
+const { bankRound } = require('./utility/num_util.js');
+const { isPowerOfTwo } = require('./utility/type_util.js');
 
 const displayRefA = 1;
 const audioRefA = 0.00001;
