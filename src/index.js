@@ -1,4 +1,4 @@
-const { Image } = require('./image.js');
+const { JKImage } = require('./jkimage.js');
 const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageProcessing.js');
 const { RGB, RGBA } = require('./rgb.js');
 const { relativeLuminence, linearize8Bit } = require('./srgb.js');
@@ -37,7 +37,8 @@ img.onload = function() {
     console.log(data);
     let tt = new Tensor([3,3], data);
     console.log(tt);
-    tt.pad([1,1, 1], [1,1,1], [0,0,0]);
+    //tt.pad([1,1, 1], [1,3,1], [0,0,0]);
+    console.log("gettring 1, 3 " + tt.get([[], []]));
     console.log(tt.data);
     console.log(tt.toNestedArray());
     console.log(psf.gauss(5, 5, 1));
@@ -54,7 +55,7 @@ img.onload = function() {
     let rawImgData = contextData.data;
     console.log("image pix = " + rawImgData.length);
     console.log(rawImgData)
-    let read = new Image(rawImgData, cwidth, true);
+    let read = new JKImage(rawImgData, cwidth, true);
     // console.log(read.getRedChannel());
     // console.log(read.widthRes);
     // console.log(read.heightRes);
@@ -100,7 +101,7 @@ img.onload = function() {
     for (let g = 0; g < grays.length; g++) {
         grayImg.push(grays[g], grays[g], grays[g], 255);
     }
-    console.log(padRealImage(gray, pw, 4, 6, 6));
+    console.log(padRealImage(grays, pw, 4, 6, 6));
     console.log(grayImg);
     console.log("Fourier");
     let { ReX, ImX } = FFT2DFromRealImage(grayImg, pw, 4, true);

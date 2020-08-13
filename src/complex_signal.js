@@ -1,5 +1,5 @@
-const { mag } = require('./lin');
-const { bankRound } = require('./valuetype');
+const { mag } = require('./linear.js');
+const { bankRound } = require('./utility/num_util.js');
 
 //Returns the magnitude of the complex sinusoid
 function magnitude(re, im) {

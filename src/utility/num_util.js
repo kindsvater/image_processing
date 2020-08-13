@@ -38,5 +38,6 @@ module.exports = {
     intToHex,
     hexToInt,
     roundTo,
-    clampTo
+    clampTo,
+    bankRound
 }

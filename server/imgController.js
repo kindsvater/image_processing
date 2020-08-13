@@ -3,8 +3,8 @@ const { decodeGamma8Bit, relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB 
 const { lightnessToASCII, lightnessToGrayscale, rgbaGradient } = require("../src/colorpropconvert.js");
 const { lightness, XYZtoLAB, LABtoXYZ, illuminant } = require("../src/cie.js");
 const { loadChanTreeFile, randomColorFromChanTreeBuff } = require("../src/writeBrightnessFiles.js");
-const { histogram } = require("../src/imageProcessing");
-const { ImageReader } = require("../src/ImageReader");
+const { histogram } = require("../src/imageProcessing.js");
+const {JKImage } = require("../src/jkimage.js");
 const treeBuffPath = '255buff/ct' //'cieBuff/ct'
 
 function imgToRGBA(rawImgData) {

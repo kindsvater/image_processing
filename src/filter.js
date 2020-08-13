@@ -1,13 +1,14 @@
-const { zeros, initialize, roundTo } = require("./util");
+const { zeros, initArray } = require("./utility/array_util.js");
+const { roundTo } = require('./utility/num_util.js');
 
 const impulse = {
     "delta" : (n=16, shift=0, scale=1) => { 
-        let d = zeros(n);
+        let d = zeros([n], true);
         d[shift] = scale;
         return d;
     },
-    "step" : n => initialize(n, 1),
-    "movingAverage" : n => initialize(n, 1 / n),
+    "step" : n => initArray(1, [n]),
+    "movingAverage" : n => initArray(1 / n, [n]),
     "gauss" : (n, scale) => {
         let ir = [],
             x;
@@ -20,7 +21,7 @@ const impulse = {
 }
 function edgeEnhance(k) { return [[-k/8,-k/8,-k/8], [-k/8,k+1,-k/8], [-k/8,-k/8,-k/8]] }
 const psf = {
-    "box" : (rows, cols) => initialize(1, rows, cols),
+    "box" : (rows, cols) => initArray(1, [rows, cols]),
     "delta" : edgeEnhance(0),
     "shiftSubtract" : [[0,0,0],[0,1,0],[0,0,-1]],
     "edgeDetect" : edgeEnhance(1),

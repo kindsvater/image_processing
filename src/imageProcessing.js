@@ -5,7 +5,7 @@ const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie.js');
 const { bankRound } = require('./utility/num_util.js');
 const { zeros } = require('./utility/array_util.js');
 const { isPowerOfTwo } = require('./utility/type_util.js');
-const { ImageReader } = require('./image.js');
+const { JKImage } = require('./jkimage.js');
 const { convolveComplex } = require('./signal.js');
 
 //Given a flat array of RGB or RGBA image data and a function to calculate a property of a color: creates a 
@@ -24,7 +24,7 @@ function histogram(img, calc, nbins, min, max, a=true) {
         freqHist[m] = 0;
     }
 
-    let reader = new ImageReader(img, a);
+    let reader = new JKImage(img, a);
     while(reader.hasNextColor()) {
         let L = calc(reader.nextColor())
         if (L >= min && L < max) {
@@ -76,7 +76,7 @@ function equalizeImgLight(img, min, max) {
 
     let equalCDF = equalizeHist(cdf(normHist), 255);
 
-    let read = new ImageReader(img, true);
+    let read = new JKImage(img, true);
     let labImg = [];
     while(read.hasNextColor()) {
         labImg.push(XYZtoLAB(sRGBtoXYZ(read.nextColor())));
@@ -185,12 +185,12 @@ function chirpZTransformImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
     while (m < n * 2 + 1) m *= 2;
     //Perform the following Z-Transform for all channels
     for (let c = 0; c < chans; c++) {
-        let tcos = [],
-            tsin = [],
-            ReA = zeros(m);
-            ImA = zeros(m);
-            ReB = zeros(m);
-            ImB = zeros(m);
+        let tcos = [];
+        let tsin = [];
+        let ReA = zeros([m], true);
+        let ImA = zeros([m], true);
+        let ReB = zeros([m], true);
+        let ImB = zeros([m], true);
 
         for (let i = 0; i < n; i++) {
             let j = i * i % (n * 2),
@@ -269,7 +269,7 @@ function FFT2DFromComplexImage(ReX, ImX, chans, pWidth) {
 **/
 function FFT2DFromRealImage(img, pWidth, chans, inPlace=true) {
     let ReX = inPlace ? img : [];
-        ImX = zeros(img.length);
+    let ImX = zeros([img.length], true);
     return FFT2DFromComplexImage(ReX, ImX, chans, pWidth);
 }
 
@@ -283,7 +283,7 @@ function FFT2DFromRealImage(img, pWidth, chans, inPlace=true) {
  * @returns {Array}  ComplexSignal.ImX The imaginary component of the signal in the freq domain.
 **/
 function inverseFFT2DImage(ReX, ImX, chans, pWidth) {
-    let ccTotal = ReX.length;
+    let ccTotal = ReX.length,
         pHeight = ccTotal / pWidth / chans,
         normal = pHeight * pWidth;
     if (ccTotal !== ImX.length) throw new Error("Complex Image Component lengths do not match");

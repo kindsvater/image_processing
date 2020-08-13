@@ -3,29 +3,29 @@ const { relativeLuminence, linearize8Bit } = require('./srgb.js');
 const { lightness } = require('./cie.js');
 const { Tensor } = require('./tensor.js');
 
-const Image = (function() {
-    function Image(img, width, a) {
+const JKImage = (function() {
+    function JKImage(img, width, a) {
         this.colorIdx = 0;
         this.width = width;
         this.height = img.length / width / (a ? 4 : 3);
         this.tupleSize = a ? 4 : 3;
         this.lightVector; //maybe choose object so you can cache different ranges?/
-        Tensor.call(this, [height, width, a], img);
+        Tensor.call(this, [this.height, width, a], img);
     }
-    Image.prototype = Object.create(Tensor.prototype);
-    Image.prototype.constructor = Image;
-    const $IR = Image.prototype;
+    JKImage.prototype = Object.create(Tensor.prototype);
+    JKImage.prototype.constructor = JKImage;
+    const $JKI = JKImage.prototype;
 
-    $IR.areValidIndices = function(rowI, colI) {
+    $JKI.areValidIndices = function(rowI, colI) {
         if (rowI >= this.heightRes) throw new Error("Row index " + rowI + " is out of bounds.");
         if (colI >= this.widthRes) throw new Error("Columnindex " + colI + " is our of bound.");
         return true;
     }
-    $IR.flatPixelIndex = function(rowI, colI) {
+    $JKI.flatPixelIndex = function(rowI, colI) {
         areValidIndices(rowI, colI);
         return (rowI * this.widthRes * this.tupleSize) + (colI * this.tupleSize);
     } 
-    $IR.nextColor = function(a=false) {
+    $JKI.nextColor = function(a=false) {
         let color;
         if (a) {
             color = RGBA.color(
@@ -40,7 +40,7 @@ const Image = (function() {
         this.colorIdx += this.tupleSize;
         return color;
     } 
-    $IR.eachColor = function(cb, a=false) {
+    $JKI.eachColor = function(cb, a=false) {
         while(this.hasNextColor()) {
             let curr = this.colorIdx;
             let cont = cb(this.nextColor(a), curr);
@@ -48,10 +48,10 @@ const Image = (function() {
         }
         return;
     }
-    $IR.hasNextColor = function() {
+    $JKI.hasNextColor = function() {
         return this.colorIdx < this.data.length;
     }
-    $IR.toPixels = function(a=false) {
+    $JKI.toPixels = function(a=false) {
         //if (this.pixels) return this.pixels; could add caching
         let pixelVector = [];
         this.eachColor((color) => {
@@ -61,7 +61,7 @@ const Image = (function() {
         //this.pixels = pixelVector;
         return pixelVector;
     }
-    $IR.toLightness = function(range=255) {
+    $JKI.toLightness = function(range=255) {
         //if (this.lightVector) ) Cache and also check range;
         let LVector = [];
         this.eachColor((color) => {
@@ -74,7 +74,7 @@ const Image = (function() {
         this.reset();
         return LVector;
     }
-    $IR.getLightIdxs = function(range=255) {
+    $JKI.getLightIdxs = function(range=255) {
         let lVec = this.lightVector ? this.lightVector : this.toLightness(range);
         let lightIdxs = [];
         for (let m = 0; m < lVec.length; m++) {
@@ -85,19 +85,19 @@ const Image = (function() {
         }
         return lightIdxs;
     }
-    $IR.reset = function() {
+    $JKI.reset = function() {
         this.colorIdx = 0;
     }
-    $IR.redChannelAt = function(rowI, colI) {
+    $JKI.redChannelAt = function(rowI, colI) {
         return this.data[this.flatPixelIndex(rowI, colI)];
     }
-    $IR.greenChannelAt = function(rowI, colI) {
+    $JKI.greenChannelAt = function(rowI, colI) {
         return this.data[this.flatPixelIndex(rowI, colI) + 1];
     }
-    $IR.blueChannelAt = function(rowI, colI) {
+    $JKI.blueChannelAt = function(rowI, colI) {
         return this.data[this.flatPixelIndex(rowI, colI) + 2];
     }
-    $IR.pixelAt = function(rowI, colI) {
+    $JKI.pixelAt = function(rowI, colI) {
         let pixelI = this.flatPixelIndex(rowI, colI);
         return RGB.color(this.data[pixelI], this.data[pixelI + 1], this.data[pixelI + 2]);
     }
@@ -123,24 +123,24 @@ const Image = (function() {
             return cc;
         }
     } 
-    $IR.getRedChannel = function(flat) {
+    $JKI.getRedChannel = function(flat) {
         return getChannel(this.data, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
     }
-    $IR.getGreenChannel = function(flat) {
+    $JKI.getGreenChannel = function(flat) {
         return getChannel(this.data, this.heightRes, this.widthRes, 1, this.tupleSize)(flat);
     }
-    $IR.getBlueChannel = function(flat) {
+    $JKI.getBlueChannel = function(flat) {
         return getChannel(this.data, this.heightRes, this.widthRes, 2, this.tupleSize)(flat);
     }
-    $IR.getAlphaChannel = function(flat) {
+    $JKI.getAlphaChannel = function(flat) {
         if (this.tupleSize !== 4) {
             return null;
         }
         return getChannel(this.img, this.heightRes, this.widthRes, 3, this.tupleSize)(flat);     
     }
-    return Image;
+    return JKImage;
 })();
 
 module.exports = {
-    Image
+    JKImage
 }

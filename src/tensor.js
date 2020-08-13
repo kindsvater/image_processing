@@ -1,6 +1,7 @@
 'use strict';
 const { sizeFrom, stridesFrom, isShape, toNestedArray } = require('./utility/array_util.js');
-const { reduceRangedIndex } = require('./utility/rangedindex_util.js');
+const { reduceRangedIndex, trimRangedIndex, isRangedIndex } = require('./utility/rangedindex_util.js');
+
 const Tensor = (function() {
     function Tensor(shape, data) {
         if(!isShape) {
@@ -15,6 +16,7 @@ const Tensor = (function() {
     const $T = Tensor.prototype;
     
     $T.__toDataIndex = function(tensorIndex) {
+        console.log(this.size)
         let dataIndex = 0;
         if (this.rank === 0) return dataIndex;
         
@@ -47,29 +49,28 @@ const Tensor = (function() {
     //     for (let i = 0; i < )
     // }
     $T.__getHelper = function(output, dataIndex, reducedIndex, strides) {
-        for (let dim in reducedIndex) {
-            for (let range of reducedIndex[dim]) {
-                let min;
-                let max;
-                if (Array.isArray(range)) {
-                    min = range[0];
-                    max = range[1];
-                } else {
-                    min = range;
-                    max = min;
-                }
-                if (reducedIndex.length === 1) {
-                    for (let k = min; k <= max; k++) {
-                        let base = dataIndex + k * strides[0];
-                        for (let j = 0; j < strides[0]; j++) {
-                            output.push(this.data[base + j]);
-                        }
+        let dim = 0;
+        for (let range of reducedIndex[dim]) {
+            let min;
+            let max;
+            if (Array.isArray(range)) {
+                min = range[0];
+                max = range[1];
+            } else {
+                min = range;
+                max = min;
+            }
+            if (reducedIndex.length === 1) {
+                for (let k = min; k <= max; k++) {
+                    let base = dataIndex + k * strides[0];
+                    for (let j = 0; j < strides[0]; j++) {
+                        output.push(this.data[base + j]);
+                    }
 
-                    }
-                } else {
-                    for (let k = min; k <= max; k++) {
-                        this.__getHelper(output, dataIndex + k * strides[dim], reducedIndex.slice(1), strides.slice(1));
-                    }
+                }
+            } else {
+                for (let k = min; k <= max; k++) {
+                    this.__getHelper(output, dataIndex + k * strides[dim], reducedIndex.slice(1), strides.slice(1));
                 }
             }
         }
@@ -84,13 +85,13 @@ const Tensor = (function() {
         let dataIndex = 0;
         let output;
 
-        if (isRangedIndex(trimmedIndex)) {
+        if (isRangedIndex(trimmedIndex, this.shape)) {
             output = [];
             let reducedIndex = reduceRangedIndex(trimmedIndex, this.shape);
             output = this.__getHelper(output, dataIndex, reducedIndex, this.strides);
         } else {
             dataIndex = this.__toDataIndex(trimmedIndex);
-            let outputLength = this.strides[dims - 1];
+            let outputLength = this.strides[trimmedIndex.length - 1];
             if (outputLength > 1) {
                 output = [];
                 for (let i = 0; i < outputLength; i++) {
@@ -173,6 +174,7 @@ const Tensor = (function() {
         
         if (inplace) {
             this.data = newData;
+            this.size = newData.length;
             this.shape = newShape;
             this.strides = newStrides;
             this.rank = newRank;

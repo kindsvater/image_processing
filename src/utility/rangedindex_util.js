@@ -18,7 +18,7 @@ const trimRangedIndex = (tensorIndex) => {
 
 const isRangedIndex = function(rangedIndex, shape) {
     let isRanged = false;
-    for (dim in rangedIndex) {
+    for (let dim in rangedIndex) {
         let index = rangedIndex[dim];
         let length = shape[dim];
 
@@ -67,7 +67,7 @@ const isRangedIndex = function(rangedIndex, shape) {
 
 const reduceRangedIndex = function(rangedIndex, shape) {
     let reduced = [];
-    for (dim in rangedIndex) {
+    for (let dim in rangedIndex) {
         let index = rangedIndex[dim];
         let length = shape[dim];
         if (isRangeOperator(index) || isEndOperator(index)) {
@@ -136,7 +136,7 @@ const reducedIndexStride = function(reduced) {
         let index = reduced[dim];
         let sum = 0;
 
-        for (range of index) {
+        for (let range of index) {
             sum += Array.isArray(range) ? (range[1] - range[0]) : 1;
         }
         cardinal[dim] = sum;

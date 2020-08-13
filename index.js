@@ -1,4 +1,4 @@
-const { ImageReader } = require('./ImageReader.js');
+const { JKImage } = require('./jkimage.js');
 
 let img = new Image();
 let animate = false;
@@ -57,7 +57,7 @@ img.onload = function() {
                 rawImgData[m * 4 + 3]
             ]);
         }
-        let read = new ImageReader(rawImgData, true);
+        let read = new JKImage(rawImgData, true);
         let LI = read.getLightIdxs();
         console.log("LI = ");
         console.log(LI);
