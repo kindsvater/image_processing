@@ -6,8 +6,10 @@ const isEndOperator = symbol => (!isNaN(symbol) && !isFinite(symbol));
 const isRangeOperator = symbol => (Array.isArray(symbol) && symbol.length === 0);
 const isIndex = (symbol, max, min=0) => (Number.isInteger(symbol) && symbol >= min && symbol < max);
 
-const trimRangedIndex = (tensorIndex) => {
-    let newEnd = tensorIndex.length - 1;
+const trimRangedIndex = (tensorIndex, toRank=null) => {
+    let newEnd = (Number.isInteger(toRank) && tensorIndex.length > toRank) ?
+                toRank - 1 :
+                tensorIndex.length - 1;
     for (let i = newEnd; i >= 0; i--) {
         if (!(isRangeOperator(tensorIndex[newEnd]) || isEndOperator(tensorIndex[newEnd]))) {
             return tensorIndex.slice(0, newEnd + 1);
@@ -73,7 +75,7 @@ const reduceRangedIndex = function(rangedIndex, shape) {
         if (isRangeOperator(index) || isEndOperator(index)) {
             reduced[dim] = [[0, length - 1]];
         } else if (isIndex(index, length)) {
-            reduced[dim] = [index];
+            reduced[dim] = [[index, index]];
         } else if (Array.isArray(index)) {
             let rdim = [];
             let ii = 0;
@@ -98,7 +100,7 @@ const reduceRangedIndex = function(rangedIndex, shape) {
                         throw new Error(`End Operator is not followed or preceded by the Range Operator`);
                     }
                 } else if (isIndex(index[ii])) {
-                    let pre = index[ii];
+                    pre = index[ii];
                     if (isRangeOperator(index[ii + 1])) {
                         if (isEndOperator(index[ii + 2])) {
                             post = length - 1;
@@ -113,13 +115,9 @@ const reduceRangedIndex = function(rangedIndex, shape) {
                     }
                 }
                 if (post) {
-                    if (pre === post) {
-                        rdim.push(pre);
-                    } else {
-                        rdim.push([pre, post]);
-                    }
+                    rdim.push([pre, post]);
                 } else {
-                    rdim.push(pre);
+                    rdim.push([pre, pre]);
                 }
             }
             reduced[dim] = rdim;

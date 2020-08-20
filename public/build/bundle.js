@@ -791,7 +791,7 @@ img.onload = function() {
     let tt = new Tensor([3,3], data);
     console.log(tt);
     //tt.pad([1,1, 1], [1,3,1], [0,0,0]);
-    console.log("gettring 1, 3 " + tt.get([[], []]));
+    console.log("gettring 1, 3 " + tt.get([2, [0, Infinity]]));
     console.log(tt.data);
     console.log(tt.toNestedArray());
     console.log(psf.gauss(5, 5, 1));
@@ -2275,7 +2275,7 @@ const { reduceRangedIndex, trimRangedIndex, isRangedIndex } = require('./utility
 
 const Tensor = (function() {
     function Tensor(shape, data) {
-        if(!isShape) {
+        if(!isShape(shape)) {
             throw new TypeError('Shape is not proper type. Shape should be an array of integers');
         }
         this.shape = shape;
@@ -2316,32 +2316,27 @@ const Tensor = (function() {
         }
         return dataIndex;
     }
-    // function getAll(output, startIndex, dim) {
-    //     for (let i = 0; i < )
-    // }
-    $T.__getHelper = function(output, dataIndex, reducedIndex, strides) {
-        let dim = 0;
+
+    $T.__getHelper = function(output, dataIndex, reducedIndex, dim=0) {
         for (let range of reducedIndex[dim]) {
-            let min;
-            let max;
-            if (Array.isArray(range)) {
-                min = range[0];
-                max = range[1];
-            } else {
-                min = range;
-                max = min;
-            }
-            if (reducedIndex.length === 1) {
+            let min = range[0];
+            let max = range[1];
+
+            if (dim === reducedIndex.length - 1) {
                 for (let k = min; k <= max; k++) {
-                    let base = dataIndex + k * strides[0];
-                    for (let j = 0; j < strides[0]; j++) {
+                    let base = dataIndex + k * this.strides[dim];
+                    for (let j = 0; j < this.strides[dim]; j++) {
                         output.push(this.data[base + j]);
                     }
-
                 }
             } else {
                 for (let k = min; k <= max; k++) {
-                    this.__getHelper(output, dataIndex + k * strides[dim], reducedIndex.slice(1), strides.slice(1));
+                    this.__getHelper(
+                        output,
+                        dataIndex + k * strides[dim],
+                        reducedIndex,
+                        dim + 1
+                    );
                 }
             }
         }
@@ -2349,17 +2344,16 @@ const Tensor = (function() {
     }
 
     $T.get = function(rangedIndex) {
-        let trimmedIndex = trimRangedIndex(rangedIndex);
-        if (trimmedIndex.length > this.rank) {
-            trimmedIndex = trimmedIndex.slice(0, this.rank);
-        }
+        let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
         let dataIndex = 0;
         let output;
-
+        console.log(trimmedIndex);
         if (isRangedIndex(trimmedIndex, this.shape)) {
             output = [];
             let reducedIndex = reduceRangedIndex(trimmedIndex, this.shape);
-            output = this.__getHelper(output, dataIndex, reducedIndex, this.strides);
+            console.log("Reduced");
+            console.log(reducedIndex);
+            output = this.__getHelper(output, dataIndex, reducedIndex);
         } else {
             dataIndex = this.__toDataIndex(trimmedIndex);
             let outputLength = this.strides[trimmedIndex.length - 1];
@@ -2372,20 +2366,67 @@ const Tensor = (function() {
                 output = this.data[dataIndex];
             }
         }
-
         return output;
     } 
 
-    // $T.set = function(location, value) {
-    //     if (Number.isInteger(location)) {
-    //         if (location >= this.size || location < 0) throw new Error('Index out of range');
-    //         this.data[location] = value;
-    //     } else if (!Array.isArray(location)) {
-    //         throw new Error('Location is neither a data index nor a coordinate.');
-    //     } else {
-    //         this.data[this.coordsToIndex(location)] = value;
-    //     }
-    // }
+    $T.__setHelper = function(dataIndex, reducedIndex, values, valIndex, dim=0) {
+        for (let range of reducedIndex[dim]) {
+            let min = range[0];
+            let max = range[1];
+
+            if (dim === reducedIndex.length - 1) {
+                for (let k = min; k <= max; k++) {
+                    let base = dataIndex + k * this.strides[dim];
+                    for (let j = 0; j < this.strides[0]; j++) {
+                        this.data[base + j] = values[valIndex];
+                        valIndex++;
+                    }
+                }
+            } else {
+                for (let k = min; k <= max; k++) {
+                    this.__setHelper(
+                        dataIndex + k * this.strides[dim],
+                        reducedIndex,
+                        values,
+                        valIndex,
+                        dim + 1
+                    )
+                }
+            }
+        }
+    }
+
+    $T.set = function(rangedIndex, values) {
+        if (!Array.isArray(values)) values = [values]; //If is a single value, wrap in array.
+        let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
+        let requiredInputLength;
+        let dataIndex = 0;
+
+        if (isRangedIndex(trimmedIndex, this.shape)) {
+            let reducedIndex = reduceRangedIndex(trimmedIndex, this.shape);
+            requiredInputLength = reducedSize(reducedIndex);
+            
+            if (values.length !== requiredInputLength) {
+                throw new Error(
+                    `Number of values, ${values.length}, does not meet the required amount, ${requiredInputLength}`
+                );
+            }
+
+            this.__setHelper(dataIndex, reducedIndex, values, valIndex);
+        } else {
+            dataIndex = this.__toDataIndex(trimmedIndex);
+            requiredInputLength = this.strides[trimmedIndex.length - 1];
+            if (values.length !== requiredInputLength) {
+                throw new Error(
+                    `Number of values, ${values.length}, does not meet the required amount, ${requiredInputLength}`
+                );
+            }
+            for (let i = 0; i < requiredInputLength; i++) {
+                this.data[dataIndex + i] = values[i];
+            }
+        }
+    }
+
     function padHelper(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padVals) {
         for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
             padded[pInd++] = padVals[0];
@@ -2423,6 +2464,7 @@ const Tensor = (function() {
         }
         return [oIndex, pInd];
     }
+
     $T.pad = function(padAfter, padBefore, padVals, inplace=true) {
         if (padAfter.length !== padBefore.length) {
             throw new Error(`List of padding before each dimension ${ padBefore.length }
@@ -2453,6 +2495,7 @@ const Tensor = (function() {
 
         return newData;
     }
+
     $T.toNestedArray = function() {
         return toNestedArray(this.data, this.shape);
     }
@@ -2469,8 +2512,8 @@ module.exports = {
 function isShape(shape) {
     if (!Array.isArray(shape)) return false;
     if (shape.length > 1) {
-        for (let i = 0; i <= shape.length; i++) {
-            if (!Number.isInteger(shape[i])) return false;
+        for (let dimSize of shape) {
+            if (!Number.isInteger(dimSize)) return false;
         }
     }
     return true;
@@ -2570,32 +2613,33 @@ function intToHex(int) {
 }
 
 function hexToInt(hex) {
-    if (!isHex(hex)) throw new TypeError(`Value ${ hex } is not a hexadecimal number`);
+    if (!isHex(hex)) throw new TypeError(`Value ${ hex } is not a Hexadecimal number`);
     return parseInt(hex, 16);
 }
 
-function roundTo(n, digits=0) {
+function roundTo(number, digits=0) {
     var multiplicator = Math.pow(10, digits);
-    n = parseFloat((n * multiplicator).toFixed(11));
-    return Math.round(n) / multiplicator;
+    number = parseFloat((number * multiplicator).toFixed(11));
+    return Math.round(number) / multiplicator;
 }
 
-function clampTo(value, min, max, alias=false) {
-    if (value < min) return alias ? min + ((min - value) % (max - min)) : min;
-    if (value > max) return alias ? max - (value % (max - min)) : max;
-    return value;
+function clampTo(number, min, max, alias=false) {
+    if (number < min) return alias ? min + ((min - number) % (max - min)) : min;
+    if (number > max) return alias ? max - (number % (max - min)) : max;
+    return number;
 }
 
 //From User Tim Down.
 //https://stackoverflow.com/questions/3108986/gaussian-bankers-rounding-in-javascript
-function bankRound(num, decimalPlaces=0) {
-    let m = Math.pow(10, decimalPlaces);
-    let n = +(decimalPlaces ? num * m : num).toFixed(8); //Avoid Rounding Errors
-    let i = Math.floor(n), f = n - i;
-    let e = 1e-8; //Allow for rounding errors in f
-    let r = (f > 0.5 - e && f < 0.5 + e) ? 
-        ((i % 2 === 0) ? i : i + 1) : Math.round(n);
-    return decimalPlaces ? r / m : r;
+function bankRound(number, decimalPlaces=0) {
+    let multiplicator = Math.pow(10, decimalPlaces);
+    let naturalNum = +(number * multiplicator).toFixed(8); //Avoid Rounding Errors
+    let integerPart = Math.floor(naturalNum);
+    let fractionalPart = naturalNum - integerPart;
+    let roundError = 1e-8; //Allow for rounding errors in f
+    let r = (fractionalPart > 0.5 - roundError && fractionalPart < 0.5 + roundError) ? 
+        ((integerPart % 2 === 0) ? integerPart : integerPart + 1) : Math.round(naturalNum);
+    return decimalPlaces ? r / multiplicator : r;
 }
 
 module.exports = {
@@ -2614,8 +2658,10 @@ const isEndOperator = symbol => (!isNaN(symbol) && !isFinite(symbol));
 const isRangeOperator = symbol => (Array.isArray(symbol) && symbol.length === 0);
 const isIndex = (symbol, max, min=0) => (Number.isInteger(symbol) && symbol >= min && symbol < max);
 
-const trimRangedIndex = (tensorIndex) => {
-    let newEnd = tensorIndex.length - 1;
+const trimRangedIndex = (tensorIndex, toRank=null) => {
+    let newEnd = (Number.isInteger(toRank) && tensorIndex.length > toRank) ?
+                toRank - 1 :
+                tensorIndex.length - 1;
     for (let i = newEnd; i >= 0; i--) {
         if (!(isRangeOperator(tensorIndex[newEnd]) || isEndOperator(tensorIndex[newEnd]))) {
             return tensorIndex.slice(0, newEnd + 1);
@@ -2681,7 +2727,7 @@ const reduceRangedIndex = function(rangedIndex, shape) {
         if (isRangeOperator(index) || isEndOperator(index)) {
             reduced[dim] = [[0, length - 1]];
         } else if (isIndex(index, length)) {
-            reduced[dim] = [index];
+            reduced[dim] = [[index, index]];
         } else if (Array.isArray(index)) {
             let rdim = [];
             let ii = 0;
@@ -2706,7 +2752,7 @@ const reduceRangedIndex = function(rangedIndex, shape) {
                         throw new Error(`End Operator is not followed or preceded by the Range Operator`);
                     }
                 } else if (isIndex(index[ii])) {
-                    let pre = index[ii];
+                    pre = index[ii];
                     if (isRangeOperator(index[ii + 1])) {
                         if (isEndOperator(index[ii + 2])) {
                             post = length - 1;
@@ -2721,13 +2767,9 @@ const reduceRangedIndex = function(rangedIndex, shape) {
                     }
                 }
                 if (post) {
-                    if (pre === post) {
-                        rdim.push(pre);
-                    } else {
-                        rdim.push([pre, post]);
-                    }
+                    rdim.push([pre, post]);
                 } else {
-                    rdim.push(pre);
+                    rdim.push([pre, pre]);
                 }
             }
             reduced[dim] = rdim;

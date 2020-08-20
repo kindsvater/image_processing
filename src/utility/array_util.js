@@ -3,8 +3,8 @@
 function isShape(shape) {
     if (!Array.isArray(shape)) return false;
     if (shape.length > 1) {
-        for (let i = 0; i <= shape.length; i++) {
-            if (!Number.isInteger(shape[i])) return false;
+        for (let dimSize of shape) {
+            if (!Number.isInteger(dimSize)) return false;
         }
     }
     return true;

@@ -6,32 +6,33 @@ function intToHex(int) {
 }
 
 function hexToInt(hex) {
-    if (!isHex(hex)) throw new TypeError(`Value ${ hex } is not a hexadecimal number`);
+    if (!isHex(hex)) throw new TypeError(`Value ${ hex } is not a Hexadecimal number`);
     return parseInt(hex, 16);
 }
 
-function roundTo(n, digits=0) {
+function roundTo(number, digits=0) {
     var multiplicator = Math.pow(10, digits);
-    n = parseFloat((n * multiplicator).toFixed(11));
-    return Math.round(n) / multiplicator;
+    number = parseFloat((number * multiplicator).toFixed(11));
+    return Math.round(number) / multiplicator;
 }
 
-function clampTo(value, min, max, alias=false) {
-    if (value < min) return alias ? min + ((min - value) % (max - min)) : min;
-    if (value > max) return alias ? max - (value % (max - min)) : max;
-    return value;
+function clampTo(number, min, max, alias=false) {
+    if (number < min) return alias ? min + ((min - number) % (max - min)) : min;
+    if (number > max) return alias ? max - (number % (max - min)) : max;
+    return number;
 }
 
 //From User Tim Down.
 //https://stackoverflow.com/questions/3108986/gaussian-bankers-rounding-in-javascript
-function bankRound(num, decimalPlaces=0) {
-    let m = Math.pow(10, decimalPlaces);
-    let n = +(decimalPlaces ? num * m : num).toFixed(8); //Avoid Rounding Errors
-    let i = Math.floor(n), f = n - i;
-    let e = 1e-8; //Allow for rounding errors in f
-    let r = (f > 0.5 - e && f < 0.5 + e) ? 
-        ((i % 2 === 0) ? i : i + 1) : Math.round(n);
-    return decimalPlaces ? r / m : r;
+function bankRound(number, decimalPlaces=0) {
+    let multiplicator = Math.pow(10, decimalPlaces);
+    let naturalNum = +(number * multiplicator).toFixed(8); //Avoid Rounding Errors
+    let integerPart = Math.floor(naturalNum);
+    let fractionalPart = naturalNum - integerPart;
+    let roundError = 1e-8; //Allow for rounding errors in f
+    let r = (fractionalPart > 0.5 - roundError && fractionalPart < 0.5 + roundError) ? 
+        ((integerPart % 2 === 0) ? integerPart : integerPart + 1) : Math.round(naturalNum);
+    return decimalPlaces ? r / multiplicator : r;
 }
 
 module.exports = {

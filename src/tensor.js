@@ -4,7 +4,7 @@ const { reduceRangedIndex, trimRangedIndex, isRangedIndex } = require('./utility
 
 const Tensor = (function() {
     function Tensor(shape, data) {
-        if(!isShape) {
+        if(!isShape(shape)) {
             throw new TypeError('Shape is not proper type. Shape should be an array of integers');
         }
         this.shape = shape;
@@ -45,32 +45,27 @@ const Tensor = (function() {
         }
         return dataIndex;
     }
-    // function getAll(output, startIndex, dim) {
-    //     for (let i = 0; i < )
-    // }
-    $T.__getHelper = function(output, dataIndex, reducedIndex, strides) {
-        let dim = 0;
+
+    $T.__getHelper = function(output, dataIndex, reducedIndex, dim=0) {
         for (let range of reducedIndex[dim]) {
-            let min;
-            let max;
-            if (Array.isArray(range)) {
-                min = range[0];
-                max = range[1];
-            } else {
-                min = range;
-                max = min;
-            }
-            if (reducedIndex.length === 1) {
+            let min = range[0];
+            let max = range[1];
+
+            if (dim === reducedIndex.length - 1) {
                 for (let k = min; k <= max; k++) {
-                    let base = dataIndex + k * strides[0];
-                    for (let j = 0; j < strides[0]; j++) {
+                    let base = dataIndex + k * this.strides[dim];
+                    for (let j = 0; j < this.strides[dim]; j++) {
                         output.push(this.data[base + j]);
                     }
-
                 }
             } else {
                 for (let k = min; k <= max; k++) {
-                    this.__getHelper(output, dataIndex + k * strides[dim], reducedIndex.slice(1), strides.slice(1));
+                    this.__getHelper(
+                        output,
+                        dataIndex + k * strides[dim],
+                        reducedIndex,
+                        dim + 1
+                    );
                 }
             }
         }
@@ -78,17 +73,16 @@ const Tensor = (function() {
     }
 
     $T.get = function(rangedIndex) {
-        let trimmedIndex = trimRangedIndex(rangedIndex);
-        if (trimmedIndex.length > this.rank) {
-            trimmedIndex = trimmedIndex.slice(0, this.rank);
-        }
+        let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
         let dataIndex = 0;
         let output;
-
+        console.log(trimmedIndex);
         if (isRangedIndex(trimmedIndex, this.shape)) {
             output = [];
             let reducedIndex = reduceRangedIndex(trimmedIndex, this.shape);
-            output = this.__getHelper(output, dataIndex, reducedIndex, this.strides);
+            console.log("Reduced");
+            console.log(reducedIndex);
+            output = this.__getHelper(output, dataIndex, reducedIndex);
         } else {
             dataIndex = this.__toDataIndex(trimmedIndex);
             let outputLength = this.strides[trimmedIndex.length - 1];
@@ -101,20 +95,67 @@ const Tensor = (function() {
                 output = this.data[dataIndex];
             }
         }
-
         return output;
     } 
 
-    // $T.set = function(location, value) {
-    //     if (Number.isInteger(location)) {
-    //         if (location >= this.size || location < 0) throw new Error('Index out of range');
-    //         this.data[location] = value;
-    //     } else if (!Array.isArray(location)) {
-    //         throw new Error('Location is neither a data index nor a coordinate.');
-    //     } else {
-    //         this.data[this.coordsToIndex(location)] = value;
-    //     }
-    // }
+    $T.__setHelper = function(dataIndex, reducedIndex, values, valIndex, dim=0) {
+        for (let range of reducedIndex[dim]) {
+            let min = range[0];
+            let max = range[1];
+
+            if (dim === reducedIndex.length - 1) {
+                for (let k = min; k <= max; k++) {
+                    let base = dataIndex + k * this.strides[dim];
+                    for (let j = 0; j < this.strides[0]; j++) {
+                        this.data[base + j] = values[valIndex];
+                        valIndex++;
+                    }
+                }
+            } else {
+                for (let k = min; k <= max; k++) {
+                    this.__setHelper(
+                        dataIndex + k * this.strides[dim],
+                        reducedIndex,
+                        values,
+                        valIndex,
+                        dim + 1
+                    )
+                }
+            }
+        }
+    }
+
+    $T.set = function(rangedIndex, values) {
+        if (!Array.isArray(values)) values = [values]; //If is a single value, wrap in array.
+        let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
+        let requiredInputLength;
+        let dataIndex = 0;
+
+        if (isRangedIndex(trimmedIndex, this.shape)) {
+            let reducedIndex = reduceRangedIndex(trimmedIndex, this.shape);
+            requiredInputLength = reducedSize(reducedIndex);
+            
+            if (values.length !== requiredInputLength) {
+                throw new Error(
+                    `Number of values, ${values.length}, does not meet the required amount, ${requiredInputLength}`
+                );
+            }
+
+            this.__setHelper(dataIndex, reducedIndex, values, valIndex);
+        } else {
+            dataIndex = this.__toDataIndex(trimmedIndex);
+            requiredInputLength = this.strides[trimmedIndex.length - 1];
+            if (values.length !== requiredInputLength) {
+                throw new Error(
+                    `Number of values, ${values.length}, does not meet the required amount, ${requiredInputLength}`
+                );
+            }
+            for (let i = 0; i < requiredInputLength; i++) {
+                this.data[dataIndex + i] = values[i];
+            }
+        }
+    }
+
     function padHelper(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padVals) {
         for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
             padded[pInd++] = padVals[0];
@@ -152,6 +193,7 @@ const Tensor = (function() {
         }
         return [oIndex, pInd];
     }
+
     $T.pad = function(padAfter, padBefore, padVals, inplace=true) {
         if (padAfter.length !== padBefore.length) {
             throw new Error(`List of padding before each dimension ${ padBefore.length }
@@ -182,6 +224,7 @@ const Tensor = (function() {
 
         return newData;
     }
+
     $T.toNestedArray = function() {
         return toNestedArray(this.data, this.shape);
     }
