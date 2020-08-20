@@ -154,7 +154,7 @@ module.exports = {
     XYZ,
 }
 
-},{"./utility/num_util.js":13,"./utility/type_util.js":15}],2:[function(require,module,exports){
+},{"./utility/num_util.js":14,"./utility/type_util.js":16}],2:[function(require,module,exports){
 const { zeros, initArray } = require("./utility/array_util.js");
 const { roundTo } = require('./utility/num_util.js');
 
@@ -237,7 +237,7 @@ module.exports = {
     impulse,
     psf
 }
-},{"./utility/array_util.js":12,"./utility/num_util.js":13}],3:[function(require,module,exports){
+},{"./utility/array_util.js":13,"./utility/num_util.js":14}],3:[function(require,module,exports){
 'use strict';
 const { RGB, RGBA } = require('./rgb.js');
 const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./srgb.js');
@@ -245,7 +245,7 @@ const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie.js');
 const { bankRound } = require('./utility/num_util.js');
 const { zeros } = require('./utility/array_util.js');
 const { isPowerOfTwo } = require('./utility/type_util.js');
-const { JKImage } = require('./jkimage.js');
+const { ImageReader } = require('./imagereader.js');
 const { convolveComplex } = require('./signal.js');
 
 //Given a flat array of RGB or RGBA image data and a function to calculate a property of a color: creates a 
@@ -264,7 +264,7 @@ function histogram(img, calc, nbins, min, max, a=true) {
         freqHist[m] = 0;
     }
 
-    let reader = new JKImage(img, a);
+    let reader = new ImageReader(img, a);
     while(reader.hasNextColor()) {
         let L = calc(reader.nextColor())
         if (L >= min && L < max) {
@@ -316,7 +316,7 @@ function equalizeImgLight(img, min, max) {
 
     let equalCDF = equalizeHist(cdf(normHist), 255);
 
-    let read = new JKImage(img, true);
+    let read = new ImageReader(img, true);
     let labImg = [];
     while(read.hasNextColor()) {
         labImg.push(XYZtoLAB(sRGBtoXYZ(read.nextColor())));
@@ -750,7 +750,76 @@ module.exports = {
     padRealImage,
     padComplexImage,
 }
-},{"./cie.js":1,"./jkimage.js":5,"./rgb.js":8,"./signal.js":9,"./srgb.js":10,"./utility/array_util.js":12,"./utility/num_util.js":13,"./utility/type_util.js":15}],4:[function(require,module,exports){
+},{"./cie.js":1,"./imagereader.js":4,"./rgb.js":9,"./signal.js":10,"./srgb.js":11,"./utility/array_util.js":13,"./utility/num_util.js":14,"./utility/type_util.js":16}],4:[function(require,module,exports){
+const ImageReader = (function() {
+    function ImageReader(img, a=false) {
+        this.data = img;
+        this.tupleSize = a ? 4 : 3;
+        this.colorIdx = 0;
+    }
+    const $IR = ImageReader.prototype;
+
+    $IR.nextColor = function(a=false) {
+        let color;
+        if (a) {
+            color = RGBA.color(
+                this.data[this.colorIdx], this.data[this.colorIdx + 1],
+                this.data[this.colorIdx + 2], this.data[this.colorIdx + 3]
+            );
+        } else {
+            color = RGB.color(
+                this.data[this.colorIdx], this.data[this.colorIdx + 1], this.data[this.colorIdx + 2]
+            );
+        }
+        this.colorIdx += this.tupleSize;
+        return color;
+    } 
+
+    $IR.eachColor = function(cb, a=false) {
+        while(this.hasNextColor()) {
+            let curr = this.colorIdx;
+            let cont = cb(this.nextColor(a), curr);
+            if (cont === false) break;
+        }
+        return;
+    }
+
+    $IR.hasNextColor = function() {
+        return this.colorIdx < this.data.length;
+    }
+
+    $IR.toPixels = function(a=false) {
+        //if (this.pixels) return this.pixels; could add caching
+        let pixelVector = [];
+        this.eachColor((color) => {
+            pixelVector.push(color);
+        });
+        this.reset();
+        //this.pixels = pixelVector;
+        return pixelVector;
+    }
+
+    $IR.getLightIdxs = function(range=255) {
+        let lVec = this.lightVector ? this.lightVector : this.toLightness(range);
+        let lightIdxs = [];
+        for (let m = 0; m < lVec.length; m++) {
+            if (!lightIdxs[lVec[m]]) {
+                lightIdxs[lVec[m]] = [];
+            }
+            lightIdxs[lVec[m]].push(m * this.tupleSize);
+        }
+        return lightIdxs;
+    }
+
+    $IR.reset = function() {
+        this.colorIdx = 0;
+    }
+
+    return ImageReader;
+})();
+
+module.exports = {ImageReader};
+},{}],5:[function(require,module,exports){
 const { JKImage } = require('./jkimage.js');
 const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageProcessing.js');
 const { RGB, RGBA } = require('./rgb.js');
@@ -791,7 +860,7 @@ img.onload = function() {
     let tt = new Tensor([3,3], data);
     console.log(tt);
     //tt.pad([1,1, 1], [1,3,1], [0,0,0]);
-    console.log("gettring 1, 3 " + tt.get([2, [0, Infinity]]));
+    console.log("gettring 1, 3 " + tt.get([[], [0, 2]]));
     console.log(tt.data);
     console.log(tt.toNestedArray());
     console.log(psf.gauss(5, 5, 1));
@@ -1125,7 +1194,7 @@ function displayHistogram(selector, data, color, height, width) {
     svg.append("g").call(yAxis);
 }
 
-},{"./cie.js":1,"./filter.js":2,"./imageProcessing.js":3,"./jkimage.js":5,"./randGen.js":7,"./rgb.js":8,"./signal.js":9,"./srgb.js":10,"./tensor.js":11,"./utility/array_util.js":12,"./utility/num_util.js":13}],5:[function(require,module,exports){
+},{"./cie.js":1,"./filter.js":2,"./imageProcessing.js":3,"./jkimage.js":6,"./randGen.js":8,"./rgb.js":9,"./signal.js":10,"./srgb.js":11,"./tensor.js":12,"./utility/array_util.js":13,"./utility/num_util.js":14}],6:[function(require,module,exports){
 const { RGB, RGBA } = require('./rgb.js');
 const { relativeLuminence, linearize8Bit } = require('./srgb.js');
 const { lightness } = require('./cie.js');
@@ -1138,7 +1207,7 @@ const JKImage = (function() {
         this.height = img.length / width / (a ? 4 : 3);
         this.tupleSize = a ? 4 : 3;
         this.lightVector; //maybe choose object so you can cache different ranges?/
-        Tensor.call(this, [this.height, width, a], img);
+        Tensor.call(this, [this.height, width, this.tupleSize], img);
     }
     JKImage.prototype = Object.create(Tensor.prototype);
     JKImage.prototype.constructor = JKImage;
@@ -1272,7 +1341,7 @@ const JKImage = (function() {
 module.exports = {
     JKImage
 }
-},{"./cie.js":1,"./rgb.js":8,"./srgb.js":10,"./tensor.js":11}],6:[function(require,module,exports){
+},{"./cie.js":1,"./rgb.js":9,"./srgb.js":11,"./tensor.js":12}],7:[function(require,module,exports){
 //Calculates and returns the magnitude (spatial length) of a vector.
 const mag = vector => Math.sqrt(vector.reduce((acc, curr) => acc + (curr * curr)));
 //A and B are both N length vectors. Returns the angle in Radians between them.
@@ -1470,7 +1539,7 @@ module.exports = {
     angle,
     cross
 }
-},{}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 const { clampTo } = require('./utility/num_util.js');
 //Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
 //probabilities of two outcomes. Probability in excess of a is distributed evenly 
@@ -1597,7 +1666,7 @@ module.exports.gaussGray = gaussGray;
 module.exports.randIntArray = randIntArray;
 
 
-},{"./utility/num_util.js":13}],8:[function(require,module,exports){
+},{"./utility/num_util.js":14}],9:[function(require,module,exports){
 const { invert, dot } = require('./linear.js');
 const redLevel = (rgbColor) => rgbColor[0];
 const greenLevel = (rgbColor) => rgbColor[1];
@@ -1665,7 +1734,7 @@ module.exports = {
     createRGBRelativeLuminance,
     gradient
 }
-},{"./linear.js":6}],9:[function(require,module,exports){
+},{"./linear.js":7}],10:[function(require,module,exports){
 'use strict';
 const { dim } = require('./linear');
 const { zeros } = require('./utility/array_util.js');
@@ -2123,7 +2192,7 @@ module.exports = {
     multiplyFreq,
     divideFreq
 }
-},{"./linear":6,"./utility/array_util.js":12,"./utility/num_util.js":13,"./utility/type_util.js":15}],10:[function(require,module,exports){
+},{"./linear":7,"./utility/array_util.js":13,"./utility/num_util.js":14,"./utility/type_util.js":16}],11:[function(require,module,exports){
 const { multiply } = require('./linear.js');
 const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
 
@@ -2268,7 +2337,7 @@ module.exports = {
     gray
 }
 
-},{"./linear.js":6,"./rgb.js":8}],11:[function(require,module,exports){
+},{"./linear.js":7,"./rgb.js":9}],12:[function(require,module,exports){
 'use strict';
 const { sizeFrom, stridesFrom, isShape, toNestedArray } = require('./utility/array_util.js');
 const { reduceRangedIndex, trimRangedIndex, isRangedIndex } = require('./utility/rangedindex_util.js');
@@ -2333,7 +2402,7 @@ const Tensor = (function() {
                 for (let k = min; k <= max; k++) {
                     this.__getHelper(
                         output,
-                        dataIndex + k * strides[dim],
+                        dataIndex + k * this.strides[dim],
                         reducedIndex,
                         dim + 1
                     );
@@ -2347,12 +2416,9 @@ const Tensor = (function() {
         let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
         let dataIndex = 0;
         let output;
-        console.log(trimmedIndex);
         if (isRangedIndex(trimmedIndex, this.shape)) {
             output = [];
             let reducedIndex = reduceRangedIndex(trimmedIndex, this.shape);
-            console.log("Reduced");
-            console.log(reducedIndex);
             output = this.__getHelper(output, dataIndex, reducedIndex);
         } else {
             dataIndex = this.__toDataIndex(trimmedIndex);
@@ -2506,7 +2572,7 @@ module.exports = {
     Tensor
 }
 
-},{"./utility/array_util.js":12,"./utility/rangedindex_util.js":14}],12:[function(require,module,exports){
+},{"./utility/array_util.js":13,"./utility/rangedindex_util.js":15}],13:[function(require,module,exports){
 
 
 function isShape(shape) {
@@ -2604,7 +2670,7 @@ module.exports = {
     zeros,
     ones,
 }
-},{}],13:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 const { isHex } = require('./type_util.js');
 
 function intToHex(int) {
@@ -2649,7 +2715,7 @@ module.exports = {
     clampTo,
     bankRound
 }
-},{"./type_util.js":15}],14:[function(require,module,exports){
+},{"./type_util.js":16}],15:[function(require,module,exports){
 'use strict';
 const { stridesFrom } = require('./array_util.js');
 //End operator is Infinity
@@ -2682,24 +2748,24 @@ const isRangedIndex = function(rangedIndex, shape) {
             let ii = 0;
             while(ii < index.length) {
                 if (isRangeOperator(index[ii])) {
-                    //'Range Operator is not between valid indices or the End Operator'
+                    console.log('Range Operator is not between valid indices or the End Operator');
                     return null;
                 }
                 if (isEndOperator(index[ii])) {
                     if (isRangeOperator(index[ii + 1])) {
                         if (!(isEndOperator(index[ii + 2]) || isIndex([ii + 2], length))) {
-                            //'Range Operator is not between valid indices or the End Operator'
+                            console.log('Range Operator is not between valid indices or the End Operator');
                             return null;
                         }
                         ii += 3;
                     } else {
-                        //'End Operator is not followed or preceded by the Range Operator'
+                        console.log('End Operator is not followed or preceded by the Range Operator');
                         return null;
                     }
-                } else if (isIndex(index[ii])) {
+                } else if (isIndex(index[ii], length)) {
                     if (isRangeOperator(index[ii + 1])) {
                         if (!(isEndOperator(index[ii + 2])) || isIndex(index[ii + 2], length, index[ii])) {
-                            //`Value following Range Operator ${index[ii + 2]} is not a valid index or End Operator`
+                            console.log(`Value following Range Operator ${index[ii + 2]} is not a valid index or End Operator`);
                             return null;
                         }
                         ii += 3;
@@ -2707,7 +2773,7 @@ const isRangedIndex = function(rangedIndex, shape) {
                         ii += 1;
                     }
                 } else {
-                    //Range Index Value ${index[ii]} is neither the End or Range Operators, nor a valid index
+                    console.log(`Range Index Value ${index[ii]} is neither the End or Range Operators, nor a valid index`);
                     return null;
                 }
             }
@@ -2751,7 +2817,7 @@ const reduceRangedIndex = function(rangedIndex, shape) {
                     } else {
                         throw new Error(`End Operator is not followed or preceded by the Range Operator`);
                     }
-                } else if (isIndex(index[ii])) {
+                } else if (isIndex(index[ii], length)) {
                     pre = index[ii];
                     if (isRangeOperator(index[ii + 1])) {
                         if (isEndOperator(index[ii + 2])) {
@@ -2795,12 +2861,15 @@ const reducedIndexStride = function(reduced) {
 }
 
 module.exports = {
+    isRangeOperator,
+    isEndOperator,
+    isIndex,
     isRangedIndex,
     reduceRangedIndex,
     trimRangedIndex,
     reducedIndexStride,
 }
-},{"./array_util.js":12}],15:[function(require,module,exports){
+},{"./array_util.js":13}],16:[function(require,module,exports){
 
 function isString(value) {
     return (typeof value === 'string' || value instanceof String);
@@ -2839,4 +2908,4 @@ module.exports = {
     is8BitInt,
     isPowerOfTwo
 }
-},{}]},{},[4]);
+},{}]},{},[5]);

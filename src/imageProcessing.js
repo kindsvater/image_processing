@@ -5,7 +5,7 @@ const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie.js');
 const { bankRound } = require('./utility/num_util.js');
 const { zeros } = require('./utility/array_util.js');
 const { isPowerOfTwo } = require('./utility/type_util.js');
-const { JKImage } = require('./jkimage.js');
+const { ImageReader } = require('./imagereader.js');
 const { convolveComplex } = require('./signal.js');
 
 //Given a flat array of RGB or RGBA image data and a function to calculate a property of a color: creates a 
@@ -24,7 +24,7 @@ function histogram(img, calc, nbins, min, max, a=true) {
         freqHist[m] = 0;
     }
 
-    let reader = new JKImage(img, a);
+    let reader = new ImageReader(img, a);
     while(reader.hasNextColor()) {
         let L = calc(reader.nextColor())
         if (L >= min && L < max) {
@@ -76,7 +76,7 @@ function equalizeImgLight(img, min, max) {
 
     let equalCDF = equalizeHist(cdf(normHist), 255);
 
-    let read = new JKImage(img, true);
+    let read = new ImageReader(img, true);
     let labImg = [];
     while(read.hasNextColor()) {
         labImg.push(XYZtoLAB(sRGBtoXYZ(read.nextColor())));

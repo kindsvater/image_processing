@@ -30,24 +30,24 @@ const isRangedIndex = function(rangedIndex, shape) {
             let ii = 0;
             while(ii < index.length) {
                 if (isRangeOperator(index[ii])) {
-                    //'Range Operator is not between valid indices or the End Operator'
+                    console.log('Range Operator is not between valid indices or the End Operator');
                     return null;
                 }
                 if (isEndOperator(index[ii])) {
                     if (isRangeOperator(index[ii + 1])) {
                         if (!(isEndOperator(index[ii + 2]) || isIndex([ii + 2], length))) {
-                            //'Range Operator is not between valid indices or the End Operator'
+                            console.log('Range Operator is not between valid indices or the End Operator');
                             return null;
                         }
                         ii += 3;
                     } else {
-                        //'End Operator is not followed or preceded by the Range Operator'
+                        console.log('End Operator is not followed or preceded by the Range Operator');
                         return null;
                     }
-                } else if (isIndex(index[ii])) {
+                } else if (isIndex(index[ii], length)) {
                     if (isRangeOperator(index[ii + 1])) {
                         if (!(isEndOperator(index[ii + 2])) || isIndex(index[ii + 2], length, index[ii])) {
-                            //`Value following Range Operator ${index[ii + 2]} is not a valid index or End Operator`
+                            console.log(`Value following Range Operator ${index[ii + 2]} is not a valid index or End Operator`);
                             return null;
                         }
                         ii += 3;
@@ -55,7 +55,7 @@ const isRangedIndex = function(rangedIndex, shape) {
                         ii += 1;
                     }
                 } else {
-                    //Range Index Value ${index[ii]} is neither the End or Range Operators, nor a valid index
+                    console.log(`Range Index Value ${index[ii]} is neither the End or Range Operators, nor a valid index`);
                     return null;
                 }
             }
@@ -99,7 +99,7 @@ const reduceRangedIndex = function(rangedIndex, shape) {
                     } else {
                         throw new Error(`End Operator is not followed or preceded by the Range Operator`);
                     }
-                } else if (isIndex(index[ii])) {
+                } else if (isIndex(index[ii], length)) {
                     pre = index[ii];
                     if (isRangeOperator(index[ii + 1])) {
                         if (isEndOperator(index[ii + 2])) {
@@ -143,6 +143,9 @@ const reducedIndexStride = function(reduced) {
 }
 
 module.exports = {
+    isRangeOperator,
+    isEndOperator,
+    isIndex,
     isRangedIndex,
     reduceRangedIndex,
     trimRangedIndex,

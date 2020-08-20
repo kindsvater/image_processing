@@ -38,7 +38,7 @@ img.onload = function() {
     let tt = new Tensor([3,3], data);
     console.log(tt);
     //tt.pad([1,1, 1], [1,3,1], [0,0,0]);
-    console.log("gettring 1, 3 " + tt.get([2, [0, Infinity]]));
+    console.log("gettring 1, 3 " + tt.get([[], [0, 2]]));
     console.log(tt.data);
     console.log(tt.toNestedArray());
     console.log(psf.gauss(5, 5, 1));

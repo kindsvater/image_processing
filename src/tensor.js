@@ -62,7 +62,7 @@ const Tensor = (function() {
                 for (let k = min; k <= max; k++) {
                     this.__getHelper(
                         output,
-                        dataIndex + k * strides[dim],
+                        dataIndex + k * this.strides[dim],
                         reducedIndex,
                         dim + 1
                     );
@@ -76,12 +76,9 @@ const Tensor = (function() {
         let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
         let dataIndex = 0;
         let output;
-        console.log(trimmedIndex);
         if (isRangedIndex(trimmedIndex, this.shape)) {
             output = [];
             let reducedIndex = reduceRangedIndex(trimmedIndex, this.shape);
-            console.log("Reduced");
-            console.log(reducedIndex);
             output = this.__getHelper(output, dataIndex, reducedIndex);
         } else {
             dataIndex = this.__toDataIndex(trimmedIndex);

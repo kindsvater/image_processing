@@ -10,7 +10,7 @@ const JKImage = (function() {
         this.height = img.length / width / (a ? 4 : 3);
         this.tupleSize = a ? 4 : 3;
         this.lightVector; //maybe choose object so you can cache different ranges?/
-        Tensor.call(this, [this.height, width, a], img);
+        Tensor.call(this, [this.height, width, this.tupleSize], img);
     }
     JKImage.prototype = Object.create(Tensor.prototype);
     JKImage.prototype.constructor = JKImage;
