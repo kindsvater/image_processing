@@ -1,5 +1,5 @@
 //Calculates and returns the magnitude (spatial length) of a vector.
-const mag = vector => Math.sqrt(vector.reduce((acc, curr) => acc + (curr * curr)));
+const mag = vector => Math.sqrt(vector.reduce((acc, curr) => acc + (curr * curr), 0));
 //A and B are both N length vectors. Returns the angle in Radians between them.
 const angle = (A, B) => Math.acos(dot(A, B) / (mag(A) * mag(B)));
 //A and B are both vectors of length 3. Returns vector C of length 3 that is orthogonal to A and B.

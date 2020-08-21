@@ -73,9 +73,9 @@ const reduceRangedIndex = function(rangedIndex, shape) {
         let index = rangedIndex[dim];
         let length = shape[dim];
         if (isRangeOperator(index) || isEndOperator(index)) {
-            reduced[dim] = [[0, length - 1]];
+            reduced[dim] = [[0, length]];
         } else if (isIndex(index, length)) {
-            reduced[dim] = [[index, index]];
+            reduced[dim] = [[index, index + 1]];
         } else if (Array.isArray(index)) {
             let rdim = [];
             let ii = 0;
@@ -89,9 +89,9 @@ const reduceRangedIndex = function(rangedIndex, shape) {
                     pre = 0;
                     if (isRangeOperator(index[ii + 1])) {
                         if (isEndOperator(index[ii + 2])) {
-                            post = length - 1;
+                            post = length;
                         } else if (isIndex(index[ii + 2], length)) {
-                            post = index[ii + 2];
+                            post = index[ii + 2] + 1;
                         } else {
                             throw new Error(`Range Operator is not between valid indices or the End Operator`);
                         }
@@ -103,9 +103,9 @@ const reduceRangedIndex = function(rangedIndex, shape) {
                     pre = index[ii];
                     if (isRangeOperator(index[ii + 1])) {
                         if (isEndOperator(index[ii + 2])) {
-                            post = length - 1;
+                            post = length;
                         } else if (isIndex(index[ii + 2], length, index[ii])) {
-                            post = index[ii + 2];
+                            post = index[ii + 2] + 1;
                         } else {
                             throw new Error(`Value following Range Operator ${index[ii + 2]} is not a valid index or End Operator`);
                         }
@@ -117,7 +117,7 @@ const reduceRangedIndex = function(rangedIndex, shape) {
                 if (post) {
                     rdim.push([pre, post]);
                 } else {
-                    rdim.push([pre, pre]);
+                    rdim.push([pre, pre + 1]);
                 }
             }
             reduced[dim] = rdim;
@@ -128,19 +128,13 @@ const reduceRangedIndex = function(rangedIndex, shape) {
     return reduced;
 }
 
-const reducedIndexStride = function(reduced) {
-    let cardinal = [];
-    for (let dim in reduced) {
-        let index = reduced[dim];
-        let sum = 0;
+const reducedShape = (reducedIndex) => reducedIndex.map(
+    dim => dim.reduce(
+        (acc, range) => acc + range[1] - range[0], 0
+    )
+);
 
-        for (let range of index) {
-            sum += Array.isArray(range) ? (range[1] - range[0]) : 1;
-        }
-        cardinal[dim] = sum;
-    }
-    return stridesFrom[cardinal];
-}
+
 
 module.exports = {
     isRangeOperator,
@@ -149,5 +143,5 @@ module.exports = {
     isRangedIndex,
     reduceRangedIndex,
     trimRangedIndex,
-    reducedIndexStride,
+    reducedShape,
 }
