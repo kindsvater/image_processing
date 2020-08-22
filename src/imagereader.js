@@ -6,6 +6,17 @@ const ImageReader = (function() {
     }
     const $IR = ImageReader.prototype;
 
+    $IR.areValidIndices = function(rowI, colI) {
+        if (rowI >= this.heightRes) throw new Error("Row index " + rowI + " is out of bounds.");
+        if (colI >= this.widthRes) throw new Error("Columnindex " + colI + " is our of bound.");
+        return true;
+    }
+
+    $IR.flatPixelIndex = function(rowI, colI) {
+        areValidIndices(rowI, colI);
+        return (rowI * this.widthRes * this.tupleSize) + (colI * this.tupleSize);
+    }
+
     $IR.nextColor = function(a=false) {
         let color;
         if (a) {
@@ -36,13 +47,11 @@ const ImageReader = (function() {
     }
 
     $IR.toPixels = function(a=false) {
-        //if (this.pixels) return this.pixels; could add caching
         let pixelVector = [];
         this.eachColor((color) => {
             pixelVector.push(color);
-        });
+        }, a);
         this.reset();
-        //this.pixels = pixelVector;
         return pixelVector;
     }
 
@@ -62,6 +71,58 @@ const ImageReader = (function() {
         this.colorIdx = 0;
     }
 
+    $IR.redChannelAt = function(rowI, colI) {
+        return this.data[this.flatPixelIndex(rowI, colI)];
+    }
+    $IR.greenChannelAt = function(rowI, colI) {
+        return this.data[this.flatPixelIndex(rowI, colI) + 1];
+    }
+    $IR.blueChannelAt = function(rowI, colI) {
+        return this.data[this.flatPixelIndex(rowI, colI) + 2];
+    }
+    $IR.pixelAt = function(rowI, colI) {
+        let pixelI = this.flatPixelIndex(rowI, colI);
+        return RGB.color(this.data[pixelI], this.data[pixelI + 1], this.data[pixelI + 2]);
+    }
+
+    function getChannel(img, heightRes, widthRes, channel, tupleSize) {
+        return function(flat=true) {
+            let cc = [];
+            let flatIndex = 0;
+            if (flat) {
+                let pi = 0;
+                for (flatIndex = 0; flatIndex < img.length; flatIndex += tupleSize) {
+                    cc[pi] = img[flatIndex + channel];
+                    pi++
+                }
+            } else {
+                for (let r = 0; r < heightRes; r++) {
+                    cc[r] = [];
+                    for (let c = 0; c < widthRes; c++) {
+                        cc[r][c] = img[flatIndex + channel];
+                        flatIndex += tupleSize;
+                    }
+                }
+            }
+            return cc;
+        }
+    }
+    
+    $IR.getRedChannel = function(flat) {
+        return getChannel(this.data, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
+    }
+    $IR.getGreenChannel = function(flat) {
+        return getChannel(this.data, this.heightRes, this.widthRes, 1, this.tupleSize)(flat);
+    }
+    $IR.getBlueChannel = function(flat) {
+        return getChannel(this.data, this.heightRes, this.widthRes, 2, this.tupleSize)(flat);
+    }
+    $IR.getAlphaChannel = function(flat) {
+        if (this.tupleSize !== 4) {
+            return null;
+        }
+        return getChannel(this.img, this.heightRes, this.widthRes, 3, this.tupleSize)(flat);     
+    }
     return ImageReader;
 })();
 

@@ -33,20 +33,20 @@ const timestep = 30;
 img.src = 'img/flowers.jpg';
 img.onload = function() {
     //checkFFT();
-    let data = [1,2,3,4,5,6,7,8,9];
-    console.log(data);
-    let tt = new Tensor([3,3], data);
-    console.log(tt);
-    //tt.pad([1,1, 1], [1,3,1], [0,0,0]);
-    console.log("settring [], 0,2 " + tt.set([[], [0, 2]], [9,1,9,1,9,1]));
-    console.log("gettring [], 0,2 " + tt.set([[], [0, 2]], [9,1,9,1,9,1]));
-    console.log(tt.data);
-    console.log(tt.toNestedArray());
-    console.log(psf.gauss(5, 5, 1));
+    // let data = [1,2,3,4,5,6,7,8,9];
+    // console.log(data);
+    // let tt = new Tensor([3,3], data);
+    // console.log(tt);
+    // //tt.pad([1,1, 1], [1,3,1], [0,0,0]);
+    // console.log("settring [], 0,2 " + tt.set([[], [0, 2]], [9,1,9,1,9,1]));
+    // tt.pad([1,1], [1,1], [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+    // console.log("gettring [], 0,2 " + tt.get([[], [0, 2]], [9,1,9,1,9,1]));
+    // console.log(tt.data);
+    // console.log(tt.toNestedArray());
+    // console.log(psf.gauss(5, 5, 1));
     let canvas = document.getElementById("manip");
     let context = canvas.getContext('2d');
     let whratio = this.height / this.width;
-
     let cwidth = 500;
     let cheight = whratio * cwidth;
     canvas.width = cwidth;
@@ -56,7 +56,9 @@ img.onload = function() {
     let rawImgData = contextData.data;
     console.log("image pix = " + rawImgData.length);
     console.log(rawImgData)
-    let read = new JKImage(rawImgData, cwidth, true);
+    let jkImage = new JKImage(rawImgData.slice(0,400), 10, true);
+    console.log(jkImage.toPixels(true));
+    console.log(jkImage.toNestedArray());
     // console.log(read.getRedChannel());
     // console.log(read.widthRes);
     // console.log(read.heightRes);

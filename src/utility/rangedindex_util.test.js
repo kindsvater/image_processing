@@ -4,6 +4,7 @@ const {
     isIndex,
     isRangedIndex,
     reduceRangedIndex,
+    shapeToRangedIndex,
     trimRangedIndex,
     reducedIndexStride,
 } = require("./rangedindex_util.js");
@@ -32,6 +33,10 @@ test('[1, [Infinity]] is a ranged index', () => {
     expect(isRangedIndex([2, [0, [], Infinity]], [3,3])).toBe(true);
 });
 
-test('[1, [Infinity]] reduces to [[1,1],[0,2]]', () => {
-    expect(reduceRangedIndex([2, [0, [], Infinity]], [3,3])).toStrictEqual([[[2,2]],[[0,2]]]);
+test('[2, [0,[],Infinity]] reduces to [[2,3],[0,3]]', () => {
+    expect(reduceRangedIndex([2, [0,[],Infinity]], [3,3])).toStrictEqual([[[2,3]],[[0,3]]]);
+});
+
+test('Translate shape to ranged index', () => {
+    expect(shapeToRangedIndex([4,5,6])).toStrictEqual([[0, [], 5], [0, [], 6], [0, [], 7]]);
 });

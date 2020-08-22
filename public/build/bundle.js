@@ -759,6 +759,17 @@ const ImageReader = (function() {
     }
     const $IR = ImageReader.prototype;
 
+    $IR.areValidIndices = function(rowI, colI) {
+        if (rowI >= this.heightRes) throw new Error("Row index " + rowI + " is out of bounds.");
+        if (colI >= this.widthRes) throw new Error("Columnindex " + colI + " is our of bound.");
+        return true;
+    }
+
+    $IR.flatPixelIndex = function(rowI, colI) {
+        areValidIndices(rowI, colI);
+        return (rowI * this.widthRes * this.tupleSize) + (colI * this.tupleSize);
+    }
+
     $IR.nextColor = function(a=false) {
         let color;
         if (a) {
@@ -789,13 +800,11 @@ const ImageReader = (function() {
     }
 
     $IR.toPixels = function(a=false) {
-        //if (this.pixels) return this.pixels; could add caching
         let pixelVector = [];
         this.eachColor((color) => {
             pixelVector.push(color);
-        });
+        }, a);
         this.reset();
-        //this.pixels = pixelVector;
         return pixelVector;
     }
 
@@ -815,6 +824,58 @@ const ImageReader = (function() {
         this.colorIdx = 0;
     }
 
+    $IR.redChannelAt = function(rowI, colI) {
+        return this.data[this.flatPixelIndex(rowI, colI)];
+    }
+    $IR.greenChannelAt = function(rowI, colI) {
+        return this.data[this.flatPixelIndex(rowI, colI) + 1];
+    }
+    $IR.blueChannelAt = function(rowI, colI) {
+        return this.data[this.flatPixelIndex(rowI, colI) + 2];
+    }
+    $IR.pixelAt = function(rowI, colI) {
+        let pixelI = this.flatPixelIndex(rowI, colI);
+        return RGB.color(this.data[pixelI], this.data[pixelI + 1], this.data[pixelI + 2]);
+    }
+
+    function getChannel(img, heightRes, widthRes, channel, tupleSize) {
+        return function(flat=true) {
+            let cc = [];
+            let flatIndex = 0;
+            if (flat) {
+                let pi = 0;
+                for (flatIndex = 0; flatIndex < img.length; flatIndex += tupleSize) {
+                    cc[pi] = img[flatIndex + channel];
+                    pi++
+                }
+            } else {
+                for (let r = 0; r < heightRes; r++) {
+                    cc[r] = [];
+                    for (let c = 0; c < widthRes; c++) {
+                        cc[r][c] = img[flatIndex + channel];
+                        flatIndex += tupleSize;
+                    }
+                }
+            }
+            return cc;
+        }
+    }
+    
+    $IR.getRedChannel = function(flat) {
+        return getChannel(this.data, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
+    }
+    $IR.getGreenChannel = function(flat) {
+        return getChannel(this.data, this.heightRes, this.widthRes, 1, this.tupleSize)(flat);
+    }
+    $IR.getBlueChannel = function(flat) {
+        return getChannel(this.data, this.heightRes, this.widthRes, 2, this.tupleSize)(flat);
+    }
+    $IR.getAlphaChannel = function(flat) {
+        if (this.tupleSize !== 4) {
+            return null;
+        }
+        return getChannel(this.img, this.heightRes, this.widthRes, 3, this.tupleSize)(flat);     
+    }
     return ImageReader;
 })();
 
@@ -855,20 +916,20 @@ const timestep = 30;
 img.src = 'img/flowers.jpg';
 img.onload = function() {
     //checkFFT();
-    let data = [1,2,3,4,5,6,7,8,9];
-    console.log(data);
-    let tt = new Tensor([3,3], data);
-    console.log(tt);
-    //tt.pad([1,1, 1], [1,3,1], [0,0,0]);
-    console.log("settring [], 0,2 " + tt.set([[], [0, 2]], [9,1,9,1,9,1]));
-    console.log("gettring [], 0,2 " + tt.set([[], [0, 2]], [9,1,9,1,9,1]));
-    console.log(tt.data);
-    console.log(tt.toNestedArray());
-    console.log(psf.gauss(5, 5, 1));
+    // let data = [1,2,3,4,5,6,7,8,9];
+    // console.log(data);
+    // let tt = new Tensor([3,3], data);
+    // console.log(tt);
+    // //tt.pad([1,1, 1], [1,3,1], [0,0,0]);
+    // console.log("settring [], 0,2 " + tt.set([[], [0, 2]], [9,1,9,1,9,1]));
+    // tt.pad([1,1], [1,1], [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+    // console.log("gettring [], 0,2 " + tt.get([[], [0, 2]], [9,1,9,1,9,1]));
+    // console.log(tt.data);
+    // console.log(tt.toNestedArray());
+    // console.log(psf.gauss(5, 5, 1));
     let canvas = document.getElementById("manip");
     let context = canvas.getContext('2d');
     let whratio = this.height / this.width;
-
     let cwidth = 500;
     let cheight = whratio * cwidth;
     canvas.width = cwidth;
@@ -878,7 +939,9 @@ img.onload = function() {
     let rawImgData = contextData.data;
     console.log("image pix = " + rawImgData.length);
     console.log(rawImgData)
-    let read = new JKImage(rawImgData, cwidth, true);
+    let jkImage = new JKImage(rawImgData.slice(0,400), 10, true);
+    console.log(jkImage.toPixels(true));
+    console.log(jkImage.toNestedArray());
     // console.log(read.getRedChannel());
     // console.log(read.widthRes);
     // console.log(read.heightRes);
@@ -1206,136 +1269,90 @@ const JKImage = (function() {
         this.colorIdx = 0;
         this.width = width;
         this.height = img.length / width / (a ? 4 : 3);
-        this.tupleSize = a ? 4 : 3;
-        this.lightVector; //maybe choose object so you can cache different ranges?/
-        Tensor.call(this, [this.height, width, this.tupleSize], img);
+        Tensor.call(this, [this.height, width, this.tuple], img);
     }
     JKImage.prototype = Object.create(Tensor.prototype);
     JKImage.prototype.constructor = JKImage;
     const $JKI = JKImage.prototype;
 
-    $JKI.areValidIndices = function(rowI, colI) {
-        if (rowI >= this.heightRes) throw new Error("Row index " + rowI + " is out of bounds.");
-        if (colI >= this.widthRes) throw new Error("Columnindex " + colI + " is our of bound.");
-        return true;
+    $JKI.tupleSize = function() {
+        return this.shape[3];
     }
-    $JKI.flatPixelIndex = function(rowI, colI) {
-        areValidIndices(rowI, colI);
-        return (rowI * this.widthRes * this.tupleSize) + (colI * this.tupleSize);
-    } 
-    $JKI.nextColor = function(a=false) {
-        let color;
-        if (a) {
-            color = RGBA.color(
-                this.data[this.colorIdx], this.data[this.colorIdx + 1],
-                this.data[this.colorIdx + 2], this.data[this.colorIdx + 3]
-            );
-        } else {
-            color = RGB.color(
-                this.data[this.colorIdx], this.data[this.colorIdx + 1], this.data[this.colorIdx + 2]
-            );
-        }
-        this.colorIdx += this.tupleSize;
-        return color;
-    } 
-    $JKI.eachColor = function(cb, a=false) {
-        while(this.hasNextColor()) {
-            let curr = this.colorIdx;
-            let cont = cb(this.nextColor(a), curr);
-            if (cont === false) break;
-        }
-        return;
+
+    $JKI.forEachPixel = function(callbackFn, a=false) {
+        let pixel = [];
+        let chanIndex;
+        let lastIndex = a ? 3 : 2;
+        this.forEachVal([[],[],[]], (value) => {
+            chanIndex = pixel.length;
+            pixel[chanIndex] = value;
+            if (chanIndex === lastIndex) {
+                callbackFn(pixel) //Helpful to pass along the tensorIndex and dataIndex?
+                pixel = [];
+            }
+        });
     }
-    $JKI.hasNextColor = function() {
-        return this.colorIdx < this.data.length;
-    }
+
     $JKI.toPixels = function(a=false) {
-        //if (this.pixels) return this.pixels; could add caching
-        let pixelVector = [];
-        this.eachColor((color) => {
-            pixelVector.push(color);
-        });
-        this.reset();
-        //this.pixels = pixelVector;
-        return pixelVector;
+        let pixelList = [];
+        let endIndex = 0;
+        this.forEachPixel((pixel) => {
+            pixelList[endIndex++] = pixel;
+        }, a);
+
+        return pixelList;
     }
+
     $JKI.toLightness = function(range=255) {
-        //if (this.lightVector) ) Cache and also check range;
-        let LVector = [];
-        this.eachColor((color) => {
-            LVector.push(
-                Math.round(
-                    (lightness(relativeLuminence(linearize8Bit(color)))) / 100 * range 
-                )
-            );   
-        });
-        this.reset();
-        return LVector;
+        let lightnessList = [];
+        let endIndex = 0;
+        this.forEachPixel((pixel) => {
+            lightnessList[endIndex++] = Math.round(
+                (lightness(relativeLuminence(linearize8Bit(pixel)))) / 100 * range 
+            )
+        }, false);
+        return lightnessList;
     }
-    $JKI.getLightIdxs = function(range=255) {
-        let lVec = this.lightVector ? this.lightVector : this.toLightness(range);
-        let lightIdxs = [];
-        for (let m = 0; m < lVec.length; m++) {
-            if (!lightIdxs[lVec[m]]) {
-                lightIdxs[lVec[m]] = [];
+
+    $JKI.lightnessDataIndices = function(range=255) {
+        let lightnessList = this.toLightness(range);
+        let lightDataIndices = [];
+        for (let m = 0; m < lightnessList.length; m++) {
+            if (!lightDataIndices[lightnessList[m]]) {
+                lightDataIndices[lightnessList[m]] = [];
             }
-            lightIdxs[lVec[m]].push(m * this.tupleSize);
+            lightDataIndices[lightnessList[m]].push(m * this.tupleSize());
         }
-        return lightIdxs;
+        return lightDataIndices;
     }
-    $JKI.reset = function() {
-        this.colorIdx = 0;
+
+    $JKI.pixelAt = function(rowIndex, colIndex) {
+        return this.getExplicit([rowIndex, colIndex]);
     }
-    $JKI.redChannelAt = function(rowI, colI) {
-        return this.data[this.flatPixelIndex(rowI, colI)];
+    $JKI.redChannelAt = function(rowIndex, colIndex) {
+        return this.getExplicit([rowIndex, colIndex, 0]);
     }
-    $JKI.greenChannelAt = function(rowI, colI) {
-        return this.data[this.flatPixelIndex(rowI, colI) + 1];
+    $JKI.greenChannelAt = function(rowIndex, colIndex) {
+        return this.getExplicit([rowIndex, colIndex, 1]);
     }
-    $JKI.blueChannelAt = function(rowI, colI) {
-        return this.data[this.flatPixelIndex(rowI, colI) + 2];
+    $JKI.blueChannelAt = function(rowIndex, colIndex) {
+        return this.getExplicit([rowIndex, colIndex, 2]);
     }
-    $JKI.pixelAt = function(rowI, colI) {
-        let pixelI = this.flatPixelIndex(rowI, colI);
-        return RGB.color(this.data[pixelI], this.data[pixelI + 1], this.data[pixelI + 2]);
+
+    $JKI.getRedChannel = function(flat=true) {
+        return this.get([[],[],0]);
     }
-    function getChannel(img, heightRes, widthRes, channel, tupleSize) {
-        return function(flat=true) {
-            let cc = [];
-            let flatIndex = 0;
-            if (flat) {
-                let pi = 0;
-                for (flatIndex = 0; flatIndex < img.length; flatIndex += tupleSize) {
-                    cc[pi] = img[flatIndex + channel];
-                    pi++
-                }
-            } else {
-                for (let r = 0; r < heightRes; r++) {
-                    cc[r] = [];
-                    for (let c = 0; c < widthRes; c++) {
-                        cc[r][c] = img[flatIndex + channel];
-                        flatIndex += tupleSize;
-                    }
-                }
-            }
-            return cc;
-        }
-    } 
-    $JKI.getRedChannel = function(flat) {
-        return getChannel(this.data, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
+    $JKI.getGreenChannel = function(flat=true) {
+        return this.get([[],[],1]);
     }
-    $JKI.getGreenChannel = function(flat) {
-        return getChannel(this.data, this.heightRes, this.widthRes, 1, this.tupleSize)(flat);
+    $JKI.getBlueChannel = function(flat=true) {
+        return this.get([[],[],2]);
     }
-    $JKI.getBlueChannel = function(flat) {
-        return getChannel(this.data, this.heightRes, this.widthRes, 2, this.tupleSize)(flat);
+    $JKI.getAlphaChannel = function(flat=true) {
+        if (this.tupleSize() < 4) return null;
+        return this.get([[],[],3]);     
     }
-    $JKI.getAlphaChannel = function(flat) {
-        if (this.tupleSize !== 4) {
-            return null;
-        }
-        return getChannel(this.img, this.heightRes, this.widthRes, 3, this.tupleSize)(flat);     
-    }
+
     return JKImage;
 })();
 
@@ -2346,7 +2363,7 @@ const { reduceRangedIndex, reducedShape, trimRangedIndex, isRangedIndex } = requ
 const Tensor = (function() {
     function Tensor(shape, data) {
         if(!isShape(shape)) {
-            throw new TypeError('Shape is not proper type. Shape should be an array of integers');
+            throw new TypeError('Shape is not well-formed. Shape should be an array of integers');
         }
         this.shape = shape;
         this.size = sizeFrom(shape);
@@ -2357,7 +2374,6 @@ const Tensor = (function() {
     const $T = Tensor.prototype;
     
     $T.__toDataIndex = function(tensorIndex) {
-        console.log(this.size)
         let dataIndex = 0;
         if (this.rank === 0) return dataIndex;
         
@@ -2387,58 +2403,6 @@ const Tensor = (function() {
         return dataIndex;
     }
 
-    // $T.get = function(rangedIndex) {
-    //     let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
-    //     let dataIndex = 0;
-    //     let output;
-    //     if (isRangedIndex(trimmedIndex, this.shape)) {
-    //         output = [];
-    //         let reducedIndex = reduceRangedIndex(trimmedIndex, this.shape);
-    //         output = this.__getHelper(output, dataIndex, reducedIndex);
-    //     } else {
-    //         dataIndex = this.__toDataIndex(trimmedIndex);
-    //         let outputLength = this.strides[trimmedIndex.length - 1];
-    //         if (outputLength > 1) {
-    //             output = [];
-    //             for (let i = 0; i < outputLength; i++) {
-    //                 output[i] = this.data[dataIndex + i];
-    //             }
-    //         } else {
-    //             output = this.data[dataIndex];
-    //         }
-    //     }
-    //     return output;
-    // } 
-
-    $T.__setHelper = function(dataIndex, reducedIndex, values, valIndex, dim=0) {
-        for (let range of reducedIndex[dim]) {
-            let min = range[0];
-            let max = range[1];
-
-            if (dim === reducedIndex.length - 1) {
-                for (let k = min; k <= max; k++) {
-                    let base = dataIndex + k * this.strides[dim];
-                    for (let j = 0; j < this.strides[0]; j++) {
-                        this.data[base + j] = values[valIndex];
-                        valIndex++;
-                    }
-                }
-            } else {
-                for (let k = min; k <= max; k++) {
-                    this.__setHelper(
-                        dataIndex + k * this.strides[dim],
-                        reducedIndex,
-                        values,
-                        valIndex,
-                        dim + 1
-                    )
-                }
-            }
-        }
-    }
-
-
-
     $T.__forEachHelper = function(dataIndex, reducedIndex, callbackFn, dim=0) {
         for (let range of reducedIndex[dim]) {
             let min = range[0];
@@ -2446,9 +2410,10 @@ const Tensor = (function() {
     
             if (dim === reducedIndex.length - 1) {
                 for (let k = min; k < max; k++) {
-                    let base = dataIndex + k * this.strides[dim];
+                    let currDI = dataIndex + k * this.strides[dim];
                     for (let j = 0; j < this.strides[dim]; j++) {
-                        callbackFn(this.data[base + j], base + j);
+                        callbackFn(this.data[currDI], currDI);
+                        currDI++;
                     }
                 }
             } else {
@@ -2463,7 +2428,20 @@ const Tensor = (function() {
             }
         }
     }
-    
+
+    $T.forEachExplicit = function(explicitIndex, callbackFn) {
+        dataIndex = this.__toDataIndex(explicitIndex);
+        if (this.rank > explicitIndex.length) {
+            let outputLength = this.strides[explicitIndex.length - 1];
+            for (let i = 0; i < outputLength; i++) {
+                callbackFn(this.data[dataIndex], dataIndex);
+                dataIndex++;
+            }
+        } else {
+            callbackFn(this.data[dataIndex], dataIndex);
+        }
+    }
+
     $T.forEachVal = function(rangedIndex, callbackFn) {
         let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
         let dataIndex = 0;
@@ -2472,12 +2450,24 @@ const Tensor = (function() {
             let reducedIndex = reduceRangedIndex(trimmedIndex, this.shape);
             this.__forEachHelper(dataIndex, reducedIndex, callbackFn);
         } else {
-            dataIndex = this.__toDataIndex(trimmedIndex);
-            let outputLength = this.strides[trimmedIndex.length - 1];
-            for (let i = 0; i < outputLength; i++) {
-                callbackFn(this.data[dataIndex++], dataIndex);
-            }
+            this.forEachExplicit(trimmedIndex, callbackFn);
         }
+    }
+    
+    $T.getExplicit = function(explicitIndex) {
+        let output;
+        if (this.rank > explicitIndex.length) {
+            output = [];
+            let i = 0;
+            this.forEachExplicit(explicitIndex, function(value) {
+                output[i] = value;
+                i++;
+            });
+        } else {
+            output = this.data[this.__toDataIndex(explicitIndex)];
+        }
+
+        return output;
     }
 
     $T.get = function(rangedIndex) {
@@ -2514,8 +2504,8 @@ const Tensor = (function() {
             valIndex++;
         });
     }
-    
-    function padHelper(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padVals) {
+
+    $T.__padHelper = function(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padVals) {
         for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
             padded[pInd++] = padVals[0];
         }
@@ -2537,7 +2527,7 @@ const Tensor = (function() {
             }
         } else {
             for (let c = 0; c < oShape[0]; c++) {
-                let indices = padHelper(
+                let indices = this.__padHelper(
                     orig, oShape.slice(1), oIndex,
                     padded, pStrides.slice(1), pInd,
                     padAfter.slice(1), padBefore.slice(1), padVals.slice(1)
@@ -2556,7 +2546,7 @@ const Tensor = (function() {
     $T.pad = function(padAfter, padBefore, padVals, inplace=true) {
         if (padAfter.length !== padBefore.length) {
             throw new Error(`List of padding before each dimension ${ padBefore.length }
-             and list of padding after each dimension ${ padAfter.length } do not match`);
+             and list of padding after each dimension ${ padAfter.length } lengths do not match`);
         }
         let newRank = padAfter.length > this.rank ? padAfter.length : this.rank,
             newShape = [],
@@ -2571,7 +2561,7 @@ const Tensor = (function() {
         }
         newStrides = stridesFrom(newShape);
 
-        padHelper(this.data, this.shape, 0, newData, newStrides, 0, padAfter, padBefore, padVals);
+        this.__padHelper(this.data, this.shape, 0, newData, newStrides, 0, padAfter, padBefore, padVals);
         
         if (inplace) {
             this.data = newData;
@@ -2874,13 +2864,16 @@ const reducedShape = (reducedIndex) => reducedIndex.map(
     )
 );
 
-
+const shapeToRangedIndex = (shape, transposeShape=null) => transposeShape ? 
+    shape.map( (dimSize, i) => [0 + transposeShape[i], [], dimSize + 1 + transposeShape[i]]) :
+    shape.map( dimSize => [0 , [], dimSize + 1]);
 
 module.exports = {
     isRangeOperator,
     isEndOperator,
     isIndex,
     isRangedIndex,
+    shapeToRangedIndex,
     reduceRangedIndex,
     trimRangedIndex,
     reducedShape,

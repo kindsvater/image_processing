@@ -134,13 +134,16 @@ const reducedShape = (reducedIndex) => reducedIndex.map(
     )
 );
 
-
+const shapeToRangedIndex = (shape, transposeShape=null) => transposeShape ? 
+    shape.map( (dimSize, i) => [0 + transposeShape[i], [], dimSize + 1 + transposeShape[i]]) :
+    shape.map( dimSize => [0 , [], dimSize + 1]);
 
 module.exports = {
     isRangeOperator,
     isEndOperator,
     isIndex,
     isRangedIndex,
+    shapeToRangedIndex,
     reduceRangedIndex,
     trimRangedIndex,
     reducedShape,
