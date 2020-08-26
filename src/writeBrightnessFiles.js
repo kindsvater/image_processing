@@ -2,7 +2,7 @@ const fs = require('fs');
 const readline = require('readline');
 const { decodeGamma8Bit } = require('./srgb.js');
 const { relativeLuminence, lightness, normalRLuminence } = require('./cie.js');
-const { randPHistInt, rhSquaredProbHist, randInt } = require('./randGen.js');
+const { randPHistInt, rhSquaredProbHist, randInt } = require('./randomgeneration.js');
 
 function hasUniformValues(arr) {
     if (!Array.isArray(arr)) {

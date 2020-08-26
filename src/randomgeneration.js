@@ -1,4 +1,5 @@
 const { clampTo } = require('./utility/num_util.js');
+
 //Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
 //probabilities of two outcomes. Probability in excess of a is distributed evenly 
 //using a RobinHood algorithm. Returns arrays K and V where K is indices of
@@ -52,12 +53,12 @@ function randProbHistogramInt(K, V) {
     return K[j];
 }
 
-//Returns an integer >= min and < min + range
+//Returns an integer greater or equal to min and less than (min + range).
 function randInt(min, range) {
     return Math.floor(Math.random() * range) + min;
 }
 
-//Generates N-length array of random integers between min and min + range.
+//Generates list of N random integers greater or equal to min and less than (min + range).
 function randIntArray(min, range, n=1) {
     let ra = [];
     for (let i = 0; i < n; i++) {
@@ -114,8 +115,6 @@ function gaussGray(res, stdDev, mean=128) {
     }
     return randGray;
 }
-
-
 
 module.exports.rhSquaredProbHist = robinHoodSquaredProbHistogram;
 module.exports.randPHistInt = randProbHistogramInt;

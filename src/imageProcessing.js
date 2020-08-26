@@ -510,3 +510,9 @@ module.exports = {
     padRealImage,
     padComplexImage,
 }
+
+function equalizeLightness(jkImage, min, max) {
+    let h = new Histogram(jkImage.toLightness(), max - min + 1, min, max);
+    let equalized  = h.equalize(256);
+
+}

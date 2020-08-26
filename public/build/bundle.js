@@ -750,7 +750,17 @@ module.exports = {
     padRealImage,
     padComplexImage,
 }
+
+function equalizeLightness(jkImage, min, max) {
+    let h = new Histogram(jkImage.toLightness(), max - min + 1, min, max);
+    let equalized  = h.equalize(256);
+
+}
 },{"./cie.js":1,"./imagereader.js":4,"./rgb.js":9,"./signal.js":10,"./srgb.js":11,"./utility/array_util.js":13,"./utility/num_util.js":14,"./utility/type_util.js":16}],4:[function(require,module,exports){
+const { RGB, RGBA } = require('./rgb.js');
+const { relativeLuminence, linearize8Bit } = require('./srgb.js');
+const { lightness } = require('./cie.js');
+
 const ImageReader = (function() {
     function ImageReader(img, a=false) {
         this.data = img;
@@ -808,6 +818,17 @@ const ImageReader = (function() {
         return pixelVector;
     }
 
+    $IR.toLightness = function(range=255) {
+        let lightnessList = [];
+        let endIndex = 0;
+        this.eachColor((color) => {
+            lightnessList[endIndex++] = Math.round(
+                (lightness(relativeLuminence(linearize8Bit(color)))) / 100 * range 
+            )
+        }, false);
+        return lightnessList;
+    }
+
     $IR.getLightIdxs = function(range=255) {
         let lVec = this.lightVector ? this.lightVector : this.toLightness(range);
         let lightIdxs = [];
@@ -860,7 +881,7 @@ const ImageReader = (function() {
             return cc;
         }
     }
-    
+
     $IR.getRedChannel = function(flat) {
         return getChannel(this.data, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
     }
@@ -880,16 +901,16 @@ const ImageReader = (function() {
 })();
 
 module.exports = {ImageReader};
-},{}],5:[function(require,module,exports){
+},{"./cie.js":1,"./rgb.js":9,"./srgb.js":11}],5:[function(require,module,exports){
 const { JKImage } = require('./jkimage.js');
-const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageProcessing.js');
+const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageprocessing.js');
 const { RGB, RGBA } = require('./rgb.js');
 const { relativeLuminence, linearize8Bit } = require('./srgb.js');
 const { lightness } = require('./cie.js');
-const { gaussGray } = require('./randGen.js');
+const { gaussGray } = require('./randomgeneration.js');
 const { zeros } = require('./utility/array_util.js');
 const { round } = require('./utility/num_util.js');
-const { randIntArray } = require('./randGen.js');
+const { randIntArray } = require('./randomgeneration.js');
 const { extendRealFreqDomain, FFT, inverseFFT } = require('./signal.js');
 const { impulse, psf } = require('./filter.js');
 const { Tensor } = require('./tensor.js');
@@ -946,7 +967,7 @@ img.onload = function() {
     // console.log(read.widthRes);
     // console.log(read.heightRes);
     // console.log(read.widthRes * read.heightRes * 4);
-    let LI = read.getLightIdxs();
+    let LI = jkImage.lightnessDataIndices();
 
     // convertImagetoASCII(rawImgData, cwidth, (textImage) => {
     //     document.getElementById('result').innerHTML = textImage;
@@ -1258,8 +1279,7 @@ function displayHistogram(selector, data, color, height, width) {
     svg.append("g").call(yAxis);
 }
 
-},{"./cie.js":1,"./filter.js":2,"./imageProcessing.js":3,"./jkimage.js":6,"./randGen.js":8,"./rgb.js":9,"./signal.js":10,"./srgb.js":11,"./tensor.js":12,"./utility/array_util.js":13,"./utility/num_util.js":14}],6:[function(require,module,exports){
-const { RGB, RGBA } = require('./rgb.js');
+},{"./cie.js":1,"./filter.js":2,"./imageprocessing.js":3,"./jkimage.js":6,"./randomgeneration.js":8,"./rgb.js":9,"./signal.js":10,"./srgb.js":11,"./tensor.js":12,"./utility/array_util.js":13,"./utility/num_util.js":14}],6:[function(require,module,exports){
 const { relativeLuminence, linearize8Bit } = require('./srgb.js');
 const { lightness } = require('./cie.js');
 const { Tensor } = require('./tensor.js');
@@ -1269,7 +1289,7 @@ const JKImage = (function() {
         this.colorIdx = 0;
         this.width = width;
         this.height = img.length / width / (a ? 4 : 3);
-        Tensor.call(this, [this.height, width, this.tuple], img);
+        Tensor.call(this, [this.height, width, a ? 4 : 3], img);
     }
     JKImage.prototype = Object.create(Tensor.prototype);
     JKImage.prototype.constructor = JKImage;
@@ -1359,7 +1379,7 @@ const JKImage = (function() {
 module.exports = {
     JKImage
 }
-},{"./cie.js":1,"./rgb.js":9,"./srgb.js":11,"./tensor.js":12}],7:[function(require,module,exports){
+},{"./cie.js":1,"./srgb.js":11,"./tensor.js":12}],7:[function(require,module,exports){
 //Calculates and returns the magnitude (spatial length) of a vector.
 const mag = vector => Math.sqrt(vector.reduce((acc, curr) => acc + (curr * curr), 0));
 //A and B are both N length vectors. Returns the angle in Radians between them.
@@ -1559,6 +1579,7 @@ module.exports = {
 }
 },{}],8:[function(require,module,exports){
 const { clampTo } = require('./utility/num_util.js');
+
 //Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
 //probabilities of two outcomes. Probability in excess of a is distributed evenly 
 //using a RobinHood algorithm. Returns arrays K and V where K is indices of
@@ -1612,12 +1633,12 @@ function randProbHistogramInt(K, V) {
     return K[j];
 }
 
-//Returns an integer >= min and < min + range
+//Returns an integer greater or equal to min and less than (min + range).
 function randInt(min, range) {
     return Math.floor(Math.random() * range) + min;
 }
 
-//Generates N-length array of random integers between min and min + range.
+//Generates list of N random integers greater or equal to min and less than (min + range).
 function randIntArray(min, range, n=1) {
     let ra = [];
     for (let i = 0; i < n; i++) {
@@ -1674,8 +1695,6 @@ function gaussGray(res, stdDev, mean=128) {
     }
     return randGray;
 }
-
-
 
 module.exports.rhSquaredProbHist = robinHoodSquaredProbHistogram;
 module.exports.randPHistInt = randProbHistogramInt;

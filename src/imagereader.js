@@ -1,3 +1,7 @@
+const { RGB, RGBA } = require('./rgb.js');
+const { relativeLuminence, linearize8Bit } = require('./srgb.js');
+const { lightness } = require('./cie.js');
+
 const ImageReader = (function() {
     function ImageReader(img, a=false) {
         this.data = img;
@@ -55,6 +59,17 @@ const ImageReader = (function() {
         return pixelVector;
     }
 
+    $IR.toLightness = function(range=255) {
+        let lightnessList = [];
+        let endIndex = 0;
+        this.eachColor((color) => {
+            lightnessList[endIndex++] = Math.round(
+                (lightness(relativeLuminence(linearize8Bit(color)))) / 100 * range 
+            )
+        }, false);
+        return lightnessList;
+    }
+
     $IR.getLightIdxs = function(range=255) {
         let lVec = this.lightVector ? this.lightVector : this.toLightness(range);
         let lightIdxs = [];
@@ -107,7 +122,7 @@ const ImageReader = (function() {
             return cc;
         }
     }
-    
+
     $IR.getRedChannel = function(flat) {
         return getChannel(this.data, this.heightRes, this.widthRes, 0, this.tupleSize)(flat);
     }

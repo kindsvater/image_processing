@@ -1,12 +1,12 @@
 const { JKImage } = require('./jkimage.js');
-const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageProcessing.js');
+const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageprocessing.js');
 const { RGB, RGBA } = require('./rgb.js');
 const { relativeLuminence, linearize8Bit } = require('./srgb.js');
 const { lightness } = require('./cie.js');
-const { gaussGray } = require('./randGen.js');
+const { gaussGray } = require('./randomgeneration.js');
 const { zeros } = require('./utility/array_util.js');
 const { round } = require('./utility/num_util.js');
-const { randIntArray } = require('./randGen.js');
+const { randIntArray } = require('./randomgeneration.js');
 const { extendRealFreqDomain, FFT, inverseFFT } = require('./signal.js');
 const { impulse, psf } = require('./filter.js');
 const { Tensor } = require('./tensor.js');
@@ -63,7 +63,7 @@ img.onload = function() {
     // console.log(read.widthRes);
     // console.log(read.heightRes);
     // console.log(read.widthRes * read.heightRes * 4);
-    let LI = read.getLightIdxs();
+    let LI = jkImage.lightnessDataIndices();
 
     // convertImagetoASCII(rawImgData, cwidth, (textImage) => {
     //     document.getElementById('result').innerHTML = textImage;

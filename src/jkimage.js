@@ -1,4 +1,3 @@
-const { RGB, RGBA } = require('./rgb.js');
 const { relativeLuminence, linearize8Bit } = require('./srgb.js');
 const { lightness } = require('./cie.js');
 const { Tensor } = require('./tensor.js');
@@ -8,7 +7,7 @@ const JKImage = (function() {
         this.colorIdx = 0;
         this.width = width;
         this.height = img.length / width / (a ? 4 : 3);
-        Tensor.call(this, [this.height, width, this.tuple], img);
+        Tensor.call(this, [this.height, width, a ? 4 : 3], img);
     }
     JKImage.prototype = Object.create(Tensor.prototype);
     JKImage.prototype.constructor = JKImage;
