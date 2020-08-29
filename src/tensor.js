@@ -38,10 +38,8 @@ const Tensor = (function() {
         return tensorIndex;
     }
 
-    $T.__incrementDataIndex = function(dataIndex, increments, dimIndices) {
-        for (let i in dimIndices) {
-            dataIndex += this.strides[dimIndices[i]] * increments[i];
-        }
+    $T.__incrementDataIndex = function(dataIndex, increment, dimIndex) {
+        dataIndex += this.strides[dimIndex] * increment;
         return dataIndex;
     }
 
@@ -72,7 +70,7 @@ const Tensor = (function() {
     }
 
     $T.forEachExplicit = function(explicitIndex, callbackFn) {
-        dataIndex = this.__toDataIndex(explicitIndex);
+        let dataIndex = this.__toDataIndex(explicitIndex);
         if (this.rank > explicitIndex.length) {
             let outputLength = this.strides[explicitIndex.length - 1];
             for (let i = 0; i < outputLength; i++) {
@@ -122,6 +120,10 @@ const Tensor = (function() {
         return output;
     }
 
+    $T.getAtDI = function(dataIndex) {
+        return this.data[dataIndex];
+    }
+    
     $T.set = function(rangedIndex, values) {
         if (!Array.isArray(values)) values = [values]; //If is a single value, wrap in array.
         let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
@@ -145,6 +147,10 @@ const Tensor = (function() {
             this.data[i] = values[valIndex];
             valIndex++;
         });
+    }
+
+    $T.setAtDI = function(dataIndex, value) {
+        this.data[dataIndex] = value;
     }
 
     $T.__padHelper = function(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padVals) {

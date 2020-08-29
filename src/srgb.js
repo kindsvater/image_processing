@@ -1,4 +1,4 @@
-const { multiply } = require('./linear.js');
+const { multiply } = require('./flatimage/linear.js');
 const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
 
 //This matrix is used to convert linearized sRGB color to its corresponding color

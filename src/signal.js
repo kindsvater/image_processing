@@ -1,5 +1,5 @@
 'use strict';
-const { dim } = require('./linear');
+const { dim } = require('./flatimage/linear');
 const { zeros } = require('./utility/array_util.js');
 const { bankRound } = require('./utility/num_util.js');
 const { isPowerOfTwo } = require('./utility/type_util.js');

@@ -1,5 +1,3 @@
-
-
 function isShape(shape) {
     if (!Array.isArray(shape)) return false;
     if (shape.length > 1) {
@@ -49,6 +47,17 @@ function toNestedArray(flatArr, shape) {
     return nestleFlatArray(flatArr, shape, 0);
 }
 
+function flatten(arr) {
+    let isFlat = true;
+    for (let i in arr) {
+        if (Array.isArray(arr[i])) {
+            arr[i] = flatten(arr[i]);
+            isFlat = false;
+        }
+    }
+    return isFlat ? arr : [].concat(...arr);
+}
+
 function initNestedArray(value, shape) {
     let arr = [];
     if (shape.length === 1) {
@@ -57,7 +66,7 @@ function initNestedArray(value, shape) {
         }
     } else {
         for (let i = 0; i < shape[0]; i++) {
-            arr[i] = intNestedArray(value, shape.slice(1));
+            arr[i] = initNestedArray(value, shape.slice(1));
         }
     }
     return arr;
@@ -73,7 +82,7 @@ function initArray(value, shape, flat=false) {
             arr[i] = value;
         }
     } else {
-        arr = createNestedArray(value, shape);
+        arr = initNestedArray(value, shape);
     }
     return arr;
 }
@@ -86,12 +95,29 @@ function ones(shape, flat=false) {
     return initArray(1, shape, flat)
 }
 
+function identity(size, flat=false) {
+    let arr; 
+    arr = zeros([size, size], flat)
+    if (flat) {
+        for (let i = 0; i < size; i++) {
+            arr[i + (i * size) - 1] = 1;
+        }
+    } else {
+        for (let i = 0; i < size; i++) {
+            arr[i][i] = 1;
+        }
+    }
+    return arr;
+}
+
 module.exports = {
     toNestedArray,
+    flatten,
     initArray,
     stridesFrom,
     sizeFrom,
     isShape,
     zeros,
     ones,
+    identity,
 }

@@ -46,7 +46,7 @@ const isRangedIndex = function(rangedIndex, shape) {
                     }
                 } else if (isIndex(index[ii], length)) {
                     if (isRangeOperator(index[ii + 1])) {
-                        if (!(isEndOperator(index[ii + 2])) || isIndex(index[ii + 2], length, index[ii])) {
+                        if (!(isEndOperator(index[ii + 2]) || isIndex(index[ii + 2], length, index[ii]))) {
                             console.log(`Value following Range Operator ${index[ii + 2]} is not a valid index or End Operator`);
                             return null;
                         }

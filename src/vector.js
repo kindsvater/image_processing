@@ -44,3 +44,7 @@ const Vector = (function() {
     }
 
 })();
+
+module.exports = {
+    Vector
+}

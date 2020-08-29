@@ -2,36 +2,40 @@ const { relativeLuminence, linearize8Bit } = require('./srgb.js');
 const { lightness } = require('./cie.js');
 const { Tensor } = require('./tensor.js');
 
-const JKImage = (function() {
-    function JKImage(img, width, a) {
+const RGBImage = (function() {
+    function RGBImage(img, width, a) {
         this.colorIdx = 0;
         this.width = width;
         this.height = img.length / width / (a ? 4 : 3);
         Tensor.call(this, [this.height, width, a ? 4 : 3], img);
     }
-    JKImage.prototype = Object.create(Tensor.prototype);
-    JKImage.prototype.constructor = JKImage;
-    const $JKI = JKImage.prototype;
+    RGBImage.prototype = Object.create(Tensor.prototype);
+    RGBImage.prototype.constructor = RGBImage;
+    const $RGBI = RGBImage.prototype;
 
-    $JKI.tupleSize = function() {
+    $RGBI.tupleSize = function() {
         return this.shape[3];
     }
-
-    $JKI.forEachPixel = function(callbackFn, a=false) {
+    $RGBI.imageSize = function() {
+        return this.width * this.height;
+    }
+    $RGBI.forEachPixel = function(callbackFn, a=false) {
         let pixel = [];
-        let chanIndex;
-        let lastIndex = a ? 3 : 2;
-        this.forEachVal([[],[],[]], (value) => {
-            chanIndex = pixel.length;
-            pixel[chanIndex] = value;
-            if (chanIndex === lastIndex) {
-                callbackFn(pixel) //Helpful to pass along the tensorIndex and dataIndex?
+        let chanIndex = 0;
+        let totalChans = this.a && a ? 4 : 3;
+        let range = [[],[],[0, [], totalChans - 1]];
+
+        this.forEachVal(range, (value, dataIndex) => {
+            pixel[chanIndex++] = value;
+            if (chanIndex === totalChans) {
+                callbackFn(pixel, dataIndex - chanIndex + 1); //Helpful to pass along the tensorIndex?
                 pixel = [];
+                chanIndex = 0;
             }
         });
     }
 
-    $JKI.toPixels = function(a=false) {
+    $RGBI.toPixels = function(a=false) {
         let pixelList = [];
         let endIndex = 0;
         this.forEachPixel((pixel) => {
@@ -41,7 +45,7 @@ const JKImage = (function() {
         return pixelList;
     }
 
-    $JKI.toLightness = function(range=255) {
+    $RGBI.toLightness = function(range=255) {
         let lightnessList = [];
         let endIndex = 0;
         this.forEachPixel((pixel) => {
@@ -52,7 +56,7 @@ const JKImage = (function() {
         return lightnessList;
     }
 
-    $JKI.lightnessDataIndices = function(range=255) {
+    $RGBI.lightnessDataIndices = function(range=255) {
         let lightnessList = this.toLightness(range);
         let lightDataIndices = [];
         for (let m = 0; m < lightnessList.length; m++) {
@@ -64,36 +68,42 @@ const JKImage = (function() {
         return lightDataIndices;
     }
 
-    $JKI.pixelAt = function(rowIndex, colIndex) {
+    $RGBI.pixelAt = function(rowIndex, colIndex) {
         return this.getExplicit([rowIndex, colIndex]);
     }
-    $JKI.redChannelAt = function(rowIndex, colIndex) {
+    $RGBI.redChannelAt = function(rowIndex, colIndex) {
         return this.getExplicit([rowIndex, colIndex, 0]);
     }
-    $JKI.greenChannelAt = function(rowIndex, colIndex) {
+    $RGBI.greenChannelAt = function(rowIndex, colIndex) {
         return this.getExplicit([rowIndex, colIndex, 1]);
     }
-    $JKI.blueChannelAt = function(rowIndex, colIndex) {
+    $RGBI.blueChannelAt = function(rowIndex, colIndex) {
         return this.getExplicit([rowIndex, colIndex, 2]);
     }
 
-    $JKI.getRedChannel = function(flat=true) {
+    $RGBI.getRedChannel = function(flat=true) {
         return this.get([[],[],0]);
     }
-    $JKI.getGreenChannel = function(flat=true) {
+    $RGBI.getGreenChannel = function(flat=true) {
         return this.get([[],[],1]);
     }
-    $JKI.getBlueChannel = function(flat=true) {
+    $RGBI.getBlueChannel = function(flat=true) {
         return this.get([[],[],2]);
     }
-    $JKI.getAlphaChannel = function(flat=true) {
+    $RGBI.getAlphaChannel = function(flat=true) {
         if (this.tupleSize() < 4) return null;
         return this.get([[],[],3]);     
     }
 
-    return JKImage;
+    return RGBImage;
 })();
 
+// const ComplexImage = (function() {
+//     function ComplexImage(ReX, ImX=null, width, a) {
+//         this.ReX = ReX;
+//         this.ImX = ImX ? ImX : zeros([ReX.shape])
+//     }
+// })
 module.exports = {
-    JKImage
+    RGBImage
 }

@@ -5,134 +5,73 @@ const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie.js');
 const { bankRound } = require('./utility/num_util.js');
 const { zeros } = require('./utility/array_util.js');
 const { isPowerOfTwo } = require('./utility/type_util.js');
-const { ImageReader } = require('./imagereader.js');
+const { RGBImage } = require('./rgbimage.js');
 const { convolveComplex } = require('./signal.js');
-
-//Given a flat array of RGB or RGBA image data and a function to calculate a property of a color: creates a 
-//n-bin normalized histogram of the calculated property value for each color in the image as long as the value
-//is within the specified range. The parameter a specifies the model for the image: true for RGBA and false for RGB
-function histogram(img, calc, nbins, min, max, a=true) {
-    if ((max - min + 1) % nbins !== 0) {
-        throw new Error("Bin size is not an integer. Histogram range must be cleanly divisible by bin count");
-    }
-    let binSize = (max - min + 1) / nbins; 
-    let total = 0; // Total colors with calculated values falling within range of histogram. 
-    
-    //Declare and initialize empty histogram
-    let freqHist = [];
-    for (let m = 0; m < nbins; m++) {
-        freqHist[m] = 0;
-    }
-
-    let reader = new ImageReader(img, a);
-    while(reader.hasNextColor()) {
-        let L = calc(reader.nextColor())
-        if (L >= min && L < max) {
-            total = total + 1;
-            freqHist[binIdx(L, min, binSize)] += 1;
-        }
-    }
-
-    return freqHist.map((freq) => parseFloat((freq / total).toPrecision(4)));
-}        
-
-function binIdx(value, min, binSize) {
-    return Math.floor((value - min) / binSize);
-}
-
-//Given an n-bin normalized histogram, returns its corresponding cumulative distribution. 
-function cdf(normHist) {
-    let cumProb = 0;
-        c = [];
-    for(let i = 0; i < normHist.length; i++) {
-        cumProb += normHist[i];
-        c[i] = parseFloat(cumProb.toPrecision(4));
-    }
-    return c;
-}
-
-//Given an n-bin Cumulative Distribution and a range of values, returns an n-index array of
-//the equalized range. 
-function equalizeHist(cdf, range) {
-    let equal = [];
-    for (let j = 0; j < cdf.length; j++) {
-        equal[j] = cdf[j] * range;
-    }
-    return equal;
-}
+const { FrequencyDist } = require('./histogram.js');
 
 //Given an RGBA image, equalizes the lightness of the image between the minimum and maximum values
-function equalizeImgLight(img, min, max) {
-    let normHist = histogram(
-        img,
-        (rgbColor) => {
-            return LAB.LVal(XYZtoLAB(sRGBtoXYZ(rgbColor))) / 100 * 255;
-            },
-        max - min + 1,
-        min,
-        max,
-        true
-    );
+function equalizeImgLight(realImage, min, max) {
+    let histogram = new FrequencyDist(realImage.toLightness(), 64, min, max);
+    let equalCDF = histogram.equalize(256);
+    let equalData = [];
 
-    let equalCDF = equalizeHist(cdf(normHist), 255);
+    realImage.forEachPixel((pixel) => {
+        let lab = XYZtoLAB(sRGBtoXYZ(pixel));
+        let l8bit = Math.floor(LAB.LVal(lab) / 100 * 255);
 
-    let read = new ImageReader(img, true);
-    let labImg = [];
-    while(read.hasNextColor()) {
-        labImg.push(XYZtoLAB(sRGBtoXYZ(read.nextColor())));
-    }
-
-    XYZtoLAB([1.0378, 0.9509, 0.8658]);
-    let equalImg = labImg.map(lab => {
-        let L8Bit = Math.floor(LAB.LVal(lab) / 100 * 255);
-        if (equalCDF[binIdx(L8Bit, min, 1)]) {
-            L8Bit = equalCDF[binIdx(L8Bit, min, 1)];
+        if (l8bit >= min && l8bit < max) {
+            let new8BitL = equalCDF[histogram.intervalIndex(l8bit)];
+            let equalsrgb = XYZtosRGB(
+                LABtoXYZ(
+                    LAB.color(new8BitL / 255 * 100, LAB.AVal(lab), LAB.BVal(lab)
+                ), undefined, true)
+            );
+            equalData.push(...equalsrgb);
+        } else {
+            equalData.push(...pixel);
         }
-        let eqLAB = LAB.color(L8Bit / 255 * 100, LAB.AVal(lab), LAB.BVal(lab));
-        let newXYZ = LABtoXYZ(eqLAB, undefined, true);
-        let sRGB = XYZtosRGB(newXYZ);
-        return sRGB;
+        equalData.push(255);
     });
-    let unclampedImg = [];
-    for (let x = 0; x < equalImg.length; x++) {
-        unclampedImg.push(RGB.redLevel(equalImg[x]), RGB.greenLevel(equalImg[x]), RGB.blueLevel(equalImg[x]), 255);
-    }
-    return new Uint8ClampedArray(unclampedImg);
+
+    return new RGBImage(equalData, realImage.width, true);
 }
 
 //Use when performing a transfrom on multi-channel flat image in place.
 //Translates the abstract index n in the input signal to its actual index in the image. 
-function translateIndex(ind, chans, pOffset, from) {
-    return from + (ind * chans * pOffset);
+function makeFFTIndex(si, dimIndex, isCol, chan) {
+    let tensorIndex = [0,0,chan];
+    tensorIndex[+isCol] = dimIndex;
+    tensorIndex[+!isCol] = si;
+    return tensorIndex;
 }
 
-function radix2FFTImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
-    if (!to) to = ReX.length;
-    let ccTotal = to - from,
-        n = pWidth > 1 ? ((((ccTotal / chans) - 1) / pWidth) + 1) : ccTotal / chans,
-        m = bankRound(Math.log2(n)),
-        j = n / 2,
+function radix2FFTImage(complexImage, dimIndex, isCol=false, chans=3) {
+    let ReX = complexImage.real,
+        ImX = complexImage.imag,
+        signalLength = isCol ? complexImage.height() : complexImage.width(),
+        power = bankRound(Math.log2(signalLength)),
+        j = signalLength / 2,
         tempR,
         tempI,
-        c,
-        tj,
-        ti;
+        c;
 
     //Sort in Reverse Bit order
-    for (let i = 1; i < n; i++) {
+    for (let i = 1; i < signalLength; i++) {
         if (i < j) {
-            ti = translateIndex(i, chans, pWidth, from);
-            tj = translateIndex(j, chans, pWidth, from);
+            let ti = ReX._toDataIndex(makeFFTIndex(i, dimIndex, isCol, 0));
+            let tj = ReX._toDataIndex(makeFFTIndex(j, dimIndex, isCol, 0));
             for (c = 0; c < chans; c++) {
-                tempR = ReX[tj + c];
-                tempI = ImX[tj + c];
-                ReX[tj + c] = ReX[ti + c];
-                ImX[tj + c] = ImX[ti + c];
-                ReX[ti + c] = tempR;
-                ImX[ti + c] = tempI;
+                tempR = ReX.getAtDI(tj);
+                tempI = ImX.getAtDI(tj);
+                ReX.getAtDI(tj) = ReX.getAtDI(ti);
+                ImX.getAtDI(tj) = ImX.getAtDI(ti);
+                ReX.getAtDI(ti) = tempR;
+                ImX.getAtDI(ti) = tempI;
+                ti = ReX._incrementDataIndex(ti, 1, 2);
+                tj = ReX._incrementDataIndex(tj, 1, 2);
             }
         }
-        let k = n / 2;
+        let k = signalLength / 2;
         while (k <= j) {
             j = j - k;
             k = k / 2;
@@ -141,7 +80,7 @@ function radix2FFTImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
     }
 
     //Loop for each stage
-    for (let stage = 1; stage <= m; stage++) {  
+    for (let stage = 1; stage <= power; stage++) {  
         let spectraSize = Math.pow(2, stage);      
         let halfSpectra = spectraSize / 2;
         let ur = 1;
@@ -153,17 +92,19 @@ function radix2FFTImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
         //Loop for each Sub-DTF
         for (j = 1; j <= halfSpectra; j++) {
             //Loop for each Butterfly
-            for (let i = j - 1; i < n; i += spectraSize) {
-                let ip = translateIndex(i + halfSpectra, chans, pWidth, from);
-                ti = translateIndex(i, chans, pWidth, from);
+            for (let i = j - 1; i < signalLength; i += spectraSize) {
+                let ip = ReX._toDataIndex(makeFFTIndex(i + halfSpectra, dimIndex, isCol, 0));
+                let ti = ReX._toDataIndex(makeFFTIndex(i, dimIndex, isCol, 0));
                 //Butterfly calculation for each channel's signal
                 for (c = 0; c < chans; c++) {
-                    tempR = ReX[ip + c] * ur - ImX[ip + c] * ui;
-                    tempI = ReX[ip + c] * ui + ImX[ip + c] * ur;
-                    ReX[ip + c] = ReX[ti + c] - tempR;
-                    ImX[ip + c] = ImX[ti + c] - tempI;
-                    ReX[ti + c] = ReX[ti + c] + tempR;
-                    ImX[ti + c] = ImX[ti + c] + tempI;
+                    tempR = ReX.getAtDI(ip) * ur - ImX.getAtDI(ip) * ui;
+                    tempI = ReX.getAtDI(ip) * ui + ImX.getAtDI(ip) * ur;
+                    ReX.getAtDI(ip) = ReX.getAtDI(ti) - tempR;
+                    ImX.getAtDI(ip) = ImX.getAtDI(ti) - tempI;
+                    ReX.getAtDI(ti) = ReX.getAtDI(ti) + tempR;
+                    ImX.getAtDI(ti) = ImX.getAtDI(ti) + tempI;
+                    ip = ReX._incrementDataIndex(ip, 1, 2);
+                    ti = ReX._incrementDataIndex(ti, 1, 2);
                 }
             }
             tempR = ur;
@@ -171,135 +112,133 @@ function radix2FFTImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
             ui = tempR * si + ui * sr;
         }
     }
-    return {ReX, ImX};
+    return complexImage;
 }
 
-function chirpZTransformImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
-    if (ReX.length !== ImX.length) throw new Error("Complex signal real and imaginary component lengths do not match");
-    if (from < 0 || from >= ReX.length) throw new Error("From Index " + from + " is out of range");
-    if (to > ReX.length) throw new Error("To Index " + to + " is out of range");
-    if (!to) to = ReX.length;
-    let ccTotal = to - from;
-    let n = pWidth > 1 ? ((((ccTotal / chans) - 1) / pWidth) + 1) : ccTotal / chans;
-    let m = 1;
-    while (m < n * 2 + 1) m *= 2;
+function chirpZTransformImage(complexImage, dimIndex, isCol=false, chans=3) {
+    let ReX = complexImage.real,
+        ImX = complexImage.imag;
+        signalLength = isCol ? complexImage.height() : complexImage.width(),
+        powerOf2 = 1;  
+    while (powerOf2 < signalLength * 2 + 1) powerOf2 *= 2;
     //Perform the following Z-Transform for all channels
-    for (let c = 0; c < chans; c++) {
+    for (let c of chans) {
         let tcos = [];
         let tsin = [];
-        let ReA = zeros([m], true);
-        let ImA = zeros([m], true);
-        let ReB = zeros([m], true);
-        let ImB = zeros([m], true);
+        let ReA = zeros([powerOf2], true);
+        let ImA = zeros([powerOf2], true);
+        let ReB = zeros([powerOf2], true);
+        let ImB = zeros([powerOf2], true);
 
-        for (let i = 0; i < n; i++) {
-            let j = i * i % (n * 2),
-                ti = translateIndex(i, chans, pWidth, from);
-            tcos[i] = Math.cos(Math.PI * j / n);
-            tsin[i] = Math.sin(Math.PI * j / n);
-            ReA[i] = ReX[ti + c] * tcos[i] + ImX[ti + c] * tsin[i];
-            ImA[i] = ImX[ti + c] * tcos[i] - ReX[ti + c] * tsin[i];
+        for (let si = 0; si < signalLength; si++) {
+            let j = si * si % (signalLength * 2),
+                ti = ReX._toDataIndex(makeFFTIndex(si, dimIndex, isCol, c));
+            tcos[si] = Math.cos(Math.PI * j / signalLength);
+            tsin[si] = Math.sin(Math.PI * j / signalLength);
+            ReA[si] = ReX.getAtDI(ti) * tcos[si] + ImX.getAtDI(ti) * tsin[si];
+            ImA[si] = ImX.getAtDI(ti) * tcos[si] - ReX.getAtDI(ti) * tsin[si];
         }
         //Pad with zeros so that length is radix-2 number M
-        for (let i = n; i < m; i++) {
-            ReA[i] = 0;
-            ImA[i] = 0;
+        for (let sigPadIndex = signalLength; sigPadIndex < powerOf2; sigPadIndex++) {
+            ReA[sigPadIndex] = 0;
+            ImA[sigPadIndex] = 0;
         }
 
         ReB[0] = tcos[0];
         ImB[0] = tsin[0];
-        for (let i = 1; i < n; i++) {
-            ReB[i] = tcos[i];
-            ImB[i] = tsin[i];
-            ReB[m - i] = tcos[i];
-            ImB[m - i] = tsin[i];
+        for (let si = 1; si < signalLength; si++) {
+            ReB[si] = tcos[si];
+            ImB[si] = tsin[si];
+            ReB[powerOf2 - si] = tcos[si];
+            ImB[powerOf2 - si] = tsin[si];
         }
 
         convolveComplex(ReA, ImA, ReB, ImB);
-        for (let i = 0; i < n; i++) {
-            let ti = translateIndex(i, chans, pWidth, from);
-            ReX[ti + c] = ReA[i] * tcos[i] + ImA[i] * tsin[i];
-            ImX[ti + c] = ImA[i] * tcos[i] - ReA[i] * tsin[i];
+        for (let si = 0; si < signalLength; si++) {
+            let ti = ReX._toDataIndex(makeFFTIndex(si, dimIndex, isCol, c));
+            ReX.setAtDI(ti, ReA[i] * tcos[i] + ImA[i] * tsin[i]);
+            ImX.setAtDI(ti, ImA[i] * tcos[i] - ReA[i] * tsin[i]);
         }
     }
-    return { ReX, ImX };
+    return complexImage;
 }
 
-function FFT1DImage(ReX, ImX, chans=1, from=0, to=0, pWidth=1) {
-    if (ReX.length !== ImX.length) throw new Error("Complex signal component lengths do not match");
-    if (from < 0 || from >= ReX.length) throw new Error("From Index " + from + " is out of range");
-    if (to > ReX.length) throw new Error("To Index " + to + " is out of range");
-    if (!to) to = ReX.length;
-    let ccTotal = to - from;
-    let n = pWidth > 1 ? ((((ccTotal / chans) - 1) / pWidth) + 1) : ccTotal / chans;
-    if (n === 0) return;
+function FFT1DImage(complexImage, dimIndex, isCol=false, chans) {
+    let signalLength = isCol ? complexImage.height() : complexImage.width();
+    if (signalLength === 0) return;
     //If Signal length is a power of two perform Radix-2 FFT
-    if (isPowerOfTwo(n)) {
-        radix2FFTImage(ReX, ImX, chans, from, to, pWidth); 
+    if (isPowerOfTwo(signalLength)) {
+        radix2FFTImage(complexImage, dimIndex, isCol, chans); 
     } else {
         //If Signal length is arbitrary or prime, perform chirp-z transfrom
-        chirpZTransformImage(ReX, ImX, chans, from, to, pWidth);
+        chirpZTransformImage(complexImage, dimIndex, isCol, chans);
     }
+    return complexImage;
 }
 
-function FFT2DFromComplexImage(ReX, ImX, chans, pWidth) {
-    let ccTotal = ReX.length;
-    if (ccTotal !== ImX.length) throw new Error("Complex Image Component lengths do not match.");
-    let pHeight = ccTotal / pWidth / chans;
-
+function FFT2DFromComplexImage(complexImage, chans) {
     //Take FFT of rows and store in real and imaginary images.
-    for (let row = 0; row < pHeight; row++) {
-        FFT1DImage(ReX, ImX, chans, (row * pWidth * chans), ((row + 1) * pWidth * chans));
+    for (let row = 0; row < complexImage.height(); row++) {
+        FFT1DImage(complexImage, row, false, chans);
     }
     //Take FFT of each column
-    for (let col = 0; col < pWidth; col++) {
-        FFT1DImage(ReX, ImX, chans, col * chans, (((pHeight - 1) * pWidth) + (col + 1)) * chans, pWidth);
+    for (let col = 0; col < complexImage.width(); col++) {
+        FFT1DImage(complexImage, col, true, chans);
     }
-    return {ReX, ImX};
+    return complexImage;
 }
 
 /** Calculates Fourier Transform of a 2D image represented as one flat multi-channel array.
- * @param   {Array}   img     Flat array of pixel color channels. Length is number of pixels * number of channels.
- * @param   {Int}     pWidth  the width of the image in pixels.
- * @param   {Int}     chans   the number of color channels per pixel.
- * @param   {boolean} inPlace If true will alter the original image array in place.
- * @returns {Object} ComplexSignal     A complex representation of the flat image in the frequency domain.
- * @returns {Array}  ComplexSignal.ReX The real component of the signal in the freq domain.
- * @returns {Array}  ComplexSignal.ImX The imaginary component of the signal in the freq domain.
+ * @param   {Object}  rgbImage Instance of the RGBImage class.
+ * @param   {Int}     chans   the number of color channels to perform the transform on.
+ * @param   {Boolean} inPlace If true will alter the original image object.
+ * @returns {Object} ComplexSignal     A complex representation of the image in the frequency domain.
+ * @returns {Array}  ComplexSignal.real The real component of the signal in the freq domain.
+ * @returns {Array}  ComplexSignal.imag The imaginary component of the signal in the freq domain.
 **/
-function FFT2DFromRealImage(img, pWidth, chans, inPlace=true) {
-    let ReX = inPlace ? img : [];
-    let ImX = zeros([img.length], true);
-    return FFT2DFromComplexImage(ReX, ImX, chans, pWidth);
+function FFT2DFromRealImage(rgbImage, chans, inPlace=true) {
+    let ReX = inPlace ? 
+        rgbImage : 
+        new RGBImage(rgbimage.data.slice(0), rgbImage.width(), rgbImage.height());
+    let ImX = new Tensor(rgbImage.shape, zeros(rgbImage.shape, true));
+    let complexImage = {
+        real : ReX,
+        imag : ImX,
+        height : () => {
+            ReX.height();
+        },
+        width : () => {
+            ReX.width();
+        }
+    }
+    return FFT2DFromComplexImage(complexImage, chans);
 }
 
 /** Inverse Fourier Transform of a complex 2D image in the frequency domain epresented as two flat multi-channel array components
- * @param   {Array}   ReX    Real Component of multi-channel flat image.
- * @param   {Array}   ImX    Imaginary Component of multi-channel flat image.
- * @param   {Int}     pWidth  the width of the image in pixels.
- * @param   {Int}     chans   the number of color channels per pixel.
+ * @param   {Object}  complexImage  instantiation of complex image class with real and imaginary components in the frequency domain.
+ * @param   {Int}     chans   the number of color channels to perform the inverse FFT on.
  * @returns {Object} ComplexSignal     References to the component arrays that have been altered in place.
- * @returns {Array}  ComplexSignal.ReX The real component of the signal in the freq domain.
- * @returns {Array}  ComplexSignal.ImX The imaginary component of the signal in the freq domain.
+ * @returns {Array}  ComplexSignal.real The real component of the signal in the time domain.
+ * @returns {Array}  ComplexSignal.imag The imaginary component of the signal in the time domain.
 **/
-function inverseFFT2DImage(ReX, ImX, chans, pWidth) {
-    let ccTotal = ReX.length,
-        pHeight = ccTotal / pWidth / chans,
-        normal = pHeight * pWidth;
-    if (ccTotal !== ImX.length) throw new Error("Complex Image Component lengths do not match");
-    for (let k = 0; k < ccTotal; k++) {
-        ImX[k] *= -1;
-    }
+function inverseFFT2DImage(complexImage, chans) {
+    let normal = complexImage.height() * complexImage.width();
 
-    FFT2DFromComplexImage(ReX, ImX, chans, pWidth);
+    complexImage.imag.forEachVal([[],[],[0,[],chans]], (amp, dataIndex) => {
+        complexImage.imag.setAtDI(dataIndex, amp * -1);
+    });
+
+    FFT2DFromComplexImage(complexImage, chans);
 
     //Normalize each value by dividing by pixelWidth * pixelHeight
-    for (let i = 0; i < ccTotal; i++) {
-        ReX[i] = ReX[i] / normal;
-        ImX[i] = -1 * ImX[i] / normal;
-    }
+    complexImage.real.forEachVal([[],[],[0,[],chans]], (value, dataIndex) => {
+        complexImage.real.setAtDI(dataIndex, value / normal);
+    });
+    complexImage.imag.forEachVal([[],[],[0,[],chans]], (value, dataIndex) => {
+        complexImage.imag.setAtDI(dataIndex, -1 * value / normal);
+    });
 
-    return { ReX, ImX };
+    return { complexImage };
 }
 
 // function multiplyFreqImage(ReX, ImX, ReH, ImH, chans, inPlace=false) {
@@ -325,69 +264,7 @@ function inverseFFT2DImage(ReX, ImX, chans, pWidth) {
 //     return { "ReX" : ReY, "ImX" : ImY }
 // }
 
-function padComplexImage(ReX, ImX, pWidth, chans, toWidth, toHeight) {
-    let ccTotal = ReX.length;
-    if (ccTotal !== ImX.length) throw new Error("Complex Image Component lengths do not match");
-    let pHeight = ccTotal / pWidth / chans,
-        newCCTotal = chans * toWidth * toHeight,
-        newRows = toHeight - pHeight,
-        newCols = toWidth - pWidth;
-    
-    //Add new rows to end of array
-    let endZeros = newRows * (pWidth + newCols) * chans;
-    for (let z = 1; z <= endZeros; z++) {
-        ReX[newCCTotal - z] = 0;
-        ImX[newCCTotal - z] = 0;
-    }
-    //Move over each former row by the column padding amount, starting with last.
-    let endIndex = newCCTotal - endZeros - 1;
-    let colZeros = newCols * chans;
-    for (let r = pHeight; r > 0; r--) {
-        for (let z = 1; z <= colZeros; z++) {
-            ReX[endIndex] = 0;
-            ImX[endIndex] = 0;
-            endIndex--;
-        }
-        let origRowEndIndex = r * chans * pWidth - 1;
-        for (let c = 0; c < pWidth * chans; c++) {
-            ReX[endIndex] = ReX[origRowEndIndex - c];
-            ImX[endIndex] = ImX[origRowEndIndex - c];
-            endIndex--;
-        }
-    }
-    return ReX, ImX;
-}
 
-function padRealImage(img, pWidth, chans, toWidth, toHeight) {
-    let ccTotal = img.length;
-    
-    let pHeight = ccTotal / pWidth / chans,
-        newCCTotal = chans * toWidth * toHeight,
-        newRows = toHeight - pHeight,
-        newCols = toWidth - pWidth;
-    
-    //Add new rows to end of array
-    let endZeros = newRows * (pWidth + newCols) * chans;
-    for (let z = 1; z <= endZeros; z++) {
-        img[newCCTotal - z] = 0;
-    }
-    //Move over each former row by the column padding amount, starting with last.
-    let endIndex = newCCTotal - endZeros - 1;
-    let colZeros = newCols * chans;
-
-    for (let r = pHeight; r > 0; r--) {
-        for (let z = 1; z <= colZeros; z++) {
-            img[endIndex] = 0;
-            endIndex--;
-        }
-        let origRowEndIndex = r * chans * pWidth - 1;
-        for (let c = 0; c < pWidth * chans; c++) {
-            img[endIndex] = img[origRowEndIndex - c];
-            endIndex--;
-        }
-    }
-    return img;
-}
 
 function depadRealImage(img, pWidth, chans, minusWidth, minusHeight) {
     let ccTotal = img.length;
@@ -500,19 +377,8 @@ function convolveRealImage(img, imgWidth, imgChans, psf, psfWidth, edge="mirror"
     }
 }
 module.exports = {
-    histogram,
-    cdf,
-    equalizeHist,
     equalizeImgLight,
     FFT2DFromRealImage,
     inverseFFT2DImage,
     FFT1DImage,
-    padRealImage,
-    padComplexImage,
-}
-
-function equalizeLightness(jkImage, min, max) {
-    let h = new Histogram(jkImage.toLightness(), max - min + 1, min, max);
-    let equalized  = h.equalize(256);
-
 }

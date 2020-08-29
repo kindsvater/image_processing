@@ -1,5 +1,5 @@
-const { JKImage } = require('./jkimage.js');
-const { histogram, cdf, equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageprocessing.js');
+const { RGBImage } = require('./rgbimage.js');
+const { equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageprocessing.js');
 const { RGB, RGBA } = require('./rgb.js');
 const { relativeLuminence, linearize8Bit } = require('./srgb.js');
 const { lightness } = require('./cie.js');
@@ -32,6 +32,7 @@ const gradOffset = 15;
 const timestep = 30;
 img.src = 'img/flowers.jpg';
 img.onload = function() {
+
     //checkFFT();
     // let data = [1,2,3,4,5,6,7,8,9];
     // console.log(data);
@@ -56,9 +57,14 @@ img.onload = function() {
     let rawImgData = contextData.data;
     console.log("image pix = " + rawImgData.length);
     console.log(rawImgData)
-    let jkImage = new JKImage(rawImgData.slice(0,400), 10, true);
+    let jkImage = new RGBImage(rawImgData.slice(0,400), 10, true);
     console.log(jkImage.toPixels(true));
     console.log(jkImage.toNestedArray());
+    let chanTotal = 0;
+    jkImage.size;
+    console.log(`Getting lightness values for ${jkImage.width * jkImage.height} pixels`)
+    console.log(jkImage.toLightness());
+    equalizeImgLight(jkImage, 0, 256);
     // console.log(read.getRedChannel());
     // console.log(read.widthRes);
     // console.log(read.heightRes);

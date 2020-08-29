@@ -1,7 +1,7 @@
 const { zeros } = require('./utility/array_util.js');
 
 const DiscreteDistribution = (function() {
-    function Distribution(data, intervalCount, min, max) {
+    function DiscreteDistribution(data, intervalCount, min, max) {
         this.dist = data;
         this.intervalCount = intervalCount;
         this.intervalSize = (max - min + 1) / intervalCount;
@@ -11,7 +11,9 @@ const DiscreteDistribution = (function() {
     const $DD = DiscreteDistribution.prototype;
 
     $DD.intervalIndex = function(value) {
-        return Math.floor((value - this.min) / this.intervalSize);
+        let index = Math.floor((value - this.min) / this.intervalSize);
+        if (this.dist[index] === undefined) return null;
+        return index;
     }
 
     // $DD.midpointArea = function(intervalIndex) {
@@ -26,7 +28,7 @@ const DiscreteDistribution = (function() {
 
 const ProbabilityDist = (function() {
     function ProbabilityDist(probabilities, min, max) {
-        Distribution.call(this, probabilities, probabilities.length, min, max);
+        DiscreteDistribution.call(this, probabilities, probabilities.length, min, max);
     }
     ProbabilityDist.prototype = Object.create(DiscreteDistribution.prototype);
     ProbabilityDist.prototype.constructor = ProbabilityDist;
@@ -42,16 +44,16 @@ const ProbabilityDist = (function() {
 
     $PD.cdf = function() {
         let acc = 0;
-        return this.dist.map((acc => prob => parseFloat(acc + prob).toPrecision(4))(0));
+        return this.dist.map((acc => prob => parseFloat(acc += prob).toPrecision(4))(0));
     }
-    return $PD;
+    return ProbabilityDist;
 })();
 
 const FrequencyDist = (function() {
     function FrequencyDist(outcomes, intervalCount, min, max) {
         this.totalOutcomes = 0;
 
-        Distribution.call(this, zeros(intervalCount), intervalCount, min, max);
+        DiscreteDistribution.call(this, zeros([intervalCount]), intervalCount, min, max);
         this.populate(outcomes);
     }
     FrequencyDist.prototype = Object.create(DiscreteDistribution.prototype);
@@ -75,14 +77,14 @@ const FrequencyDist = (function() {
     //Returns the cumulative frequency districution as a list A, where each element j is the sum of the 
     //frequencies of the distribution from 0 through j - 1.
     $FD.cumulativeFrequency = function() {
-        return this.dist.map((acc => freq => acc + freq)(0));
+        return this.dist.map((acc => freq => acc += freq)(0));
     }
     //Calculates the probability of each outcome interval and returns the corresponding probability distribution object.
     $FD.toProbabilityDist = function() {
         let probData = this.dist.map(freq => freq / this.totalOutcomes);
         return new ProbabilityDist(probData, this.min, this.max);
     }
-    
+
     $FD.pdf = function() {
         return this.dist.map(freq => parseFloat(freq / this.totalOutcomes / this.intervalSize).toPrecision(4));
     }
@@ -92,7 +94,8 @@ const FrequencyDist = (function() {
     }
     //Given a numerical range, equalizes the probabilities of the distribution's outcomes across the new range. 
     //Returns list of equalized value of each interval. 
-    $FD.equalize = function(toRange) {
+    $FD.equalize = function(toRange, withMin=0) {
+        let range = toRange - 1;
         let cumHist = this.cumulativeFrequency();
         let cumMin = 0;
         for (let i = 0; i < cumHist.length; i++) {
@@ -102,66 +105,18 @@ const FrequencyDist = (function() {
             }
         }
         let cumTotal = this.totalOutcomes - cumMin;
-        return cumHist.map(cumFreq => Math.round((cumFreq - cumMin) / cumTotal * toRange));
+        let outcome = cumHist.map(cumFreq => withMin + Math.round((cumFreq - cumMin) / cumTotal * range));
+        for (let i = 0; i < outcome.length; i++) {
+            if (outcome[i] < withMin) {
+                outcome[i] = withMin;
+            } else {
+                break;
+            }
+        }
+        return outcome;
     }
-    return $FD;
+    return FrequencyDist;
 })();
-
-// function pdf(discreteDist) {
-//     let callbackFn;
-//     if (typeof discreteDist === ProbabilityDist) {
-//         callbackFn = prob => prob / discreteDist.intervalSize;
-//     }
-//     if (typeof discreteDist === FrequencyDist) {
-//         callbackFn = freq => freq / discreteDist.totalOutcomes / discreteDist.intervalSize;
-//     }
-    
-//     return discreteDist.dist.map(value => parseFloat(callbackFn(value)).toPrecision(4));
-// }
-
-// function cdf(discreteDist) {
-//     let acc = 0;
-//     let callbackFn;
-
-//     switch(typeof discreteDist) {
-//         case ProbabilityDist :
-//             callbackFn = prob => acc + prob;
-//             break;
-//         case FrequencyDist : 
-//             callbackFn = freq => acc + (freq / discreteDist.totalOutcomes);
-//             break;
-//     }
-//     return discreteDist.dist.map(value => parseFloat(callbackFn(value)).toPrecision(4));
-// }
-
-// function cumulativeHistogram(freqDist) {
-//     if (typeof freqDist !== FrequencyDist) throw new Error(`Expected Argument 1 of type FrequencyDist, received value of type ${typeof freqDist}`);
-//     let acc = 0;
-    
-// }
-
-// function freqDistToProbDist(freqDist) {
-//     if (typeof freqDist !== FrequencyDist) throw new Error(`Expected Argument 1 of type FrequencyDist, received value of type ${typeof freqDist}`);
-//     let probData = freqDist.dist.map(freq => freq / freqDist.totalOutcomes);
-//     return new ProbabilityDist(probData, freqDist.min, freqDist.max);
-// }
-
-// function equalize(discreteDist, toRange) {
-//     if (typeof discreteDist === FrequencyDist) {
-//         let cumHist = cumulativeHistogram(discreteDist);
-//         let cumMin = 0;
-//         for (let i = 0; i < cumHist.length; i++) {
-//             if (cumHist[i] > 0) {
-//                 cumMin = cumHist[i];
-//                 break;
-//             }
-//         }
-//         let cumTotal = discreteDist.totalOutcomes - cumMin;
-//         return cumHist.map(cumFreq => Math.round((cumFreq - cumMin) / cumTotal * toRange));
-//     } else if (typeof discreteDist === ProbabilityDist) {
-
-//     }   
-// }
 
 module.exports = { 
     DiscreteDistribution,

@@ -1,4 +1,4 @@
-const { invert, dot } = require('./linear.js');
+const { invert, dot } = require('./flatimage/linear.js');
 const redLevel = (rgbColor) => rgbColor[0];
 const greenLevel = (rgbColor) => rgbColor[1];
 const blueLevel = (rgbColor) => rgbColor[2];
