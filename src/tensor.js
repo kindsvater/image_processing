@@ -225,6 +225,7 @@ const Tensor = (function() {
     $T.toNestedArray = function() {
         return toNestedArray(this.data, this.shape);
     }
+    
     return Tensor;
 })();
 
