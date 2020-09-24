@@ -241,28 +241,26 @@ function inverseFFT2DImage(complexImage, chans) {
     return { complexImage };
 }
 
-// function multiplyFreqImage(ReX, ImX, ReH, ImH, chans, inPlace=false) {
-//     let min = 0;
-//     let max = 
-//     if (!max) max = ReX.length;
-//     let ReY = inPlace ? ReX : [],
-//         ImY = inPlace ? ImX : [];
+function multiplyFreqImage(complexX, copmlexH, chans, inPlace=false) {
+    if (!max) max = ReX.length;
+    let ReY = inPlace ? ReX : [],
+        ImY = inPlace ? ImX : [];
 
-//     if (inPlace) {
-//         let temp;
-//         for (let i = min; i < max; i++) {
-//             temp = ReX[i] * ReH[i] - ImX[i] * ImH[i]; 
-//             ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
-//             ReY[i] = temp;
-//         }
-//     } else {
-//         for (let i = min; i < max; i++) {
-//             ReY[i] = ReX[i] * ReH[i] - ImX[i] * ImH[i];
-//             ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
-//         }
-//     }
-//     return { "ReX" : ReY, "ImX" : ImY }
-// }
+    if (inPlace) {
+        let temp;
+        for (let i = min; i < max; i++) {
+            temp = ReX[i] * ReH[i] - ImX[i] * ImH[i]; 
+            ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+            ReY[i] = temp;
+        }
+    } else {
+        for (let i = min; i < max; i++) {
+            ReY[i] = ReX[i] * ReH[i] - ImX[i] * ImH[i];
+            ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+        }
+    }
+    return { "ReX" : ReY, "ImX" : ImY }
+}
 
 
 
@@ -287,35 +285,50 @@ function depadRealImage(img, pWidth, chans, minusWidth, minusHeight) {
         return img;
 }
 
-function convolveRealImage(img, imgWidth, imgChans, psf, psfWidth, edge="mirror") {
+function FFTConvolution(img, psf) {
+    let heightPowerOf2 = 1;
+    let widthPowerOf2 = 1;
+    while (heightPowerOf2 < img.height() * 2 - 1) heightPowerOf2 *= 2;
+    while (widthPowerOf2 < img.width() * 2 - 1) widthPowerOf2 *= 2;
+    let imgPaddingAfter = [
+        heightPowerOf2 - img.height(),
+        widthPowerOf2 - img.width()
+    ];
+    let psfPaddingAfter = [
+        heightPowerOf2 - psf.shape[0],
+        widthPowerOf2 - psf.shape[1]
+    ];
+    img.pad()
+}
+
+function convolveRealImage(img, psf, edge="mirror") {
     let output = [];
-        ccTotal = img.length,
-        imgHeight = ccTotal / imgWidth / imgChans,
-        psfHeight = psf.length / psfWidth,
-        finalHeight = imgHeight + psfHeight - 1,
-        finalWidth = imgWidth + psfWidth - 1,
-        leftRadius = Math.ceil(psfWidth / 2) - 1, //5 = 2 4 = 1
-        rightRadius = psfWidth - leftRadius - 1, //5 = 2; 4 = 2;
-        topRadius = Math.ceil(psfHeight / 2) - 1,
-        bottomRadius = psfHeight - topRadius - 1,
+        finalHeight = img.height() + psf.rows() - 1,
+        finalWidth = img.width() + psf.cols() - 1,
+        leftRadius = Math.ceil(psf.cols() / 2) - 1, //5 = 2 4 = 1
+        rightRadius = psf.cols() - leftRadius - 1, //5 = 2; 4 = 2;
+        topRadius = Math.ceil(psf.rows() / 2) - 1,
+        bottomRadius = psf.rows() - topRadius - 1;
         // cntrRI= leftRadius,
         // cntrCI = rightRadius,
-        currIndex = 0;
-
-    for (let r = 0; r < imgHeight; r++) {
-        for (let c = 0; c < imgWidth; c++) {
-            let sum = 0,
-                subC = 0,
-                subR = 0,
-                totalSub;
+        let currIndex = 0;
+        let rightSum = 0;
+        let topSum = 0;
+        let sum = 0;
+        let subCols = 0;
+        let subRows = 0;
+        let totalSub = 0;
+    for (let row = 0; row < imgHeight; row++) {
+        for (let col = 0; col < imgWidth; col++) {
+            
 
             //calculate submerged columns and rows;
-            if (c < leftRadius) subC = leftRadius - c;
-            else if (imgWidth - c <= rightRadius) subC = rightRadius - (imgWidth - c - 1);
-            if (r < topRadius) subR = topRadius - r;
-            else if (imgHeight - r <= bottomRadius) subR = bottomRadius - (imgHeight - r - 1);
+            if (col < leftRadius) subCols = leftRadius - col;
+            else if (imgWidth - col <= rightRadius) subCols = rightRadius - (imgWidth - col - 1);
+            if (row < topRadius) subRows = topRadius - row;
+            else if (imgHeight - row <= bottomRadius) subRows = bottomRadius - (imgHeight - row - 1);
             
-            if (!subR || !subC) {
+            if (!subRows || !subCols) {
                 switch(edge) {
                     case "mirror" : 
                         wrapRInd = imgHeight - r - 1;
