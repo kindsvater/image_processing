@@ -35,10 +35,28 @@ function bankRound(number, decimalPlaces=0) {
     return decimalPlaces ? r / multiplicator : r;
 }
 
+function nextPowerOf2(number) {
+    let power = 2;
+    while (power < number) power *= 2;
+    return power;
+}
+
+function nextExponentOf2(number) {
+    let power = 2;
+    let exponent = 1;
+    while (power < number) {
+        power *= 2;
+        exponent++;
+    }
+    return exponent;
+}
+
 module.exports = {
     intToHex,
     hexToInt,
     roundTo,
     clampTo,
-    bankRound
+    bankRound,
+    nextExponentOf2,
+    nextPowerOf2
 }

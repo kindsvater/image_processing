@@ -31,45 +31,47 @@ const gradientSize = 25;
 const gradOffset = 15;
 const timestep = 30;
 img.src = 'img/flowers.jpg';
-img.onload = function() {
 
-    //checkFFT();
-    // let data = [1,2,3,4,5,6,7,8,9];
-    // console.log(data);
-    // let tt = new Tensor([3,3], data);
-    // console.log(tt);
-    // //tt.pad([1,1, 1], [1,3,1], [0,0,0]);
+img.onload = function() {
+    console.log("hi");
+
+    let data = [0,1,2,3,4,5,6,7,8,9,10,11];
+    console.log(data);
+    let tt = new Tensor([2,3,2], data);
+    console.log(tt);
+    tt.pad([1], [1]);
+    console.log(tt.toNestedArray());
     // console.log("settring [], 0,2 " + tt.set([[], [0, 2]], [9,1,9,1,9,1]));
     // tt.pad([1,1], [1,1], [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
     // console.log("gettring [], 0,2 " + tt.get([[], [0, 2]], [9,1,9,1,9,1]));
     // console.log(tt.data);
     // console.log(tt.toNestedArray());
     // console.log(psf.gauss(5, 5, 1));
-    let canvas = document.getElementById("manip");
-    let context = canvas.getContext('2d');
-    let whratio = this.height / this.width;
-    let cwidth = 500;
-    let cheight = whratio * cwidth;
-    canvas.width = cwidth;
-    canvas.height = cheight;
-    context.drawImage(this, 0, 0, cwidth, cheight);
-    let contextData = context.getImageData(0,0, cwidth, cheight);
-    let rawImgData = contextData.data;
-    console.log("image pix = " + rawImgData.length);
-    console.log(rawImgData)
-    let jkImage = new RGBImage(rawImgData.slice(0,400), 10, true);
-    console.log(jkImage.toPixels(true));
-    console.log(jkImage.toNestedArray());
-    let chanTotal = 0;
-    jkImage.size;
-    console.log(`Getting lightness values for ${jkImage.width * jkImage.height} pixels`)
-    console.log(jkImage.toLightness());
-    equalizeImgLight(jkImage, 0, 256);
-    // console.log(read.getRedChannel());
-    // console.log(read.widthRes);
-    // console.log(read.heightRes);
-    // console.log(read.widthRes * read.heightRes * 4);
-    let LI = jkImage.lightnessDataIndices();
+    // let canvas = document.getElementById("manip");
+    // let context = canvas.getContext('2d');
+    // let whratio = this.height / this.width;
+    // let cwidth = 500;
+    // let cheight = whratio * cwidth;
+    // canvas.width = cwidth;
+    // canvas.height = cheight;
+    // context.drawImage(this, 0, 0, cwidth, cheight);
+    // let contextData = context.getImageData(0,0, cwidth, cheight);
+    // let rawImgData = contextData.data;
+    // console.log("image pix = " + rawImgData.length);
+    // console.log(rawImgData)
+    // let jkImage = new RGBImage(rawImgData.slice(0,400), 10, true);
+    // console.log(jkImage.toPixels(true));
+    // console.log(jkImage.toNestedArray());
+    // let chanTotal = 0;
+    // jkImage.size;
+    // console.log(`Getting lightness values for ${jkImage.width * jkImage.height} pixels`)
+    // console.log(jkImage.toLightness());
+    // equalizeImgLight(jkImage, 0, 256);
+    // // console.log(read.getRedChannel());
+    // // console.log(read.widthRes);
+    // // console.log(read.heightRes);
+    // // console.log(read.widthRes * read.heightRes * 4);
+    // let LI = jkImage.lightnessDataIndices();
 
     // convertImagetoASCII(rawImgData, cwidth, (textImage) => {
     //     document.getElementById('result').innerHTML = textImage;

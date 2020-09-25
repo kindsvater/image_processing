@@ -1,5 +1,5 @@
 'use strict';
-const { sizeFrom, stridesFrom, isShape, toNestedArray } = require('./utility/array_util.js');
+const { sizeFrom, stridesFrom, isShape, toNestedArray, initArray } = require('./utility/array_util.js');
 const { reduceRangedIndex, reducedShape, trimRangedIndex, isRangedIndex } = require('./utility/rangedindex_util.js');
 
 const Tensor = (function() {
@@ -153,63 +153,164 @@ const Tensor = (function() {
         this.data[dataIndex] = value;
     }
 
-    $T.__padHelper = function(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padVals) {
-        for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
-            padded[pInd++] = padVals[0];
-        }
+    // $T.__padHelper = function(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padVals) {
+    //     for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
+    //         padded[pInd++] = padVals[0];
+    //     }
         
-        //Base Case: If this is the final dimension of original shape, add the original data
-        if (oShape.length === 1) {  
-            for (let c = 0; c < oShape[0]; c++) {        
-                if (padBefore.length > 1) {
-                    for (let b = 0; b < padBefore[1]; b++) {
-                        padded[pInd++] = padVals[0];
-                    }
-                }
-                padded[pInd++] = orig[oIndex++];
-                if (padAfter.length > 1) {
-                    for (let a = 0; a < padAfter[1]; a++) {
-                        padded[pInd++] = padVals[0];
-                    }
-                }
-            }
-        } else {
-            for (let c = 0; c < oShape[0]; c++) {
-                let indices = this.__padHelper(
-                    orig, oShape.slice(1), oIndex,
-                    padded, pStrides.slice(1), pInd,
-                    padAfter.slice(1), padBefore.slice(1), padVals.slice(1)
-                );
-                oIndex = indices[0];
-                pInd = indices[1];
-            }
-        }
+    //     //Base Case: If this is the final dimension of original shape, add the original data
+    //     if (oShape.length === 1) {  
+    //         for (let c = 0; c < oShape[0]; c++) {        
+    //             if (padBefore.length > 1) {
+    //                 for (let b = 0; b < padBefore[1]; b++) {
+    //                     padded[pInd++] = padVals[0];
+    //                 }
+    //             }
+    //             padded[pInd++] = orig[oIndex++];
+    //             if (padAfter.length > 1) {
+    //                 for (let a = 0; a < padAfter[1]; a++) {
+    //                     padded[pInd++] = padVals[0];
+    //                 }
+    //             }
+    //         }
+    //     } else {
+    //         for (let c = 0; c < oShape[0]; c++) {
+    //             let indices = this.__padHelper(
+    //                 orig, oShape.slice(1), oIndex,
+    //                 padded, pStrides.slice(1), pInd,
+    //                 padAfter.slice(1), padBefore.slice(1), padVals.slice(1)
+    //             );
+    //             oIndex = indices[0];
+    //             pInd = indices[1];
+    //         }
+    //     }
 
-        for (let a = 0; a < padAfter[0] * pStrides[0]; a++) {
-            padded[pInd++] = padVals[0];
+    //     for (let a = 0; a < padAfter[0] * pStrides[0]; a++) {
+    //         padded[pInd++] = padVals[0];
+    //     }
+    //     return [oIndex, pInd];
+    // }
+
+    // $T.pad = function(padAfter, padBefore, inplace=true) {
+    //     if (padAfter.length !== padBefore.length) {
+    //         throw new Error(`List of padding before each dimension ${ padBefore.length }
+    //          and list of padding after each dimension ${ padAfter.length } lengths do not match`);
+    //     }
+    //     let newRank = padAfter.length > this.rank ? padAfter.length : this.rank,
+    //         newShape = [],
+    //         newData = [],
+    //         newStrides;
+
+    //     for (let dim = 0; dim < newRank; dim++) {
+    //         let before = dim >= padBefore ? 0 : padBefore[dim],
+    //             after = dim >= padAfter ? 0 : padAfter[dim],
+    //             curr = dim >= this.rank ? 1 : this.shape[dim];
+    //         newShape[dim] = curr + before + after;
+    //     }
+    //     newStrides = stridesFrom(newShape);
+
+    //     this.__padHelper(this.data, this.shape, 0, newData, newStrides, 0, padAfter, padBefore, padVals);
+        
+    //     if (inplace) {
+    //         this.data = newData;
+    //         this.size = newData.length;
+    //         this.shape = newShape;
+    //         this.strides = newStrides;
+    //         this.rank = newRank;
+    //     }
+
+    //     return newData;
+    // }
+
+    function wrap(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
+        let before = padBefore[dim] ? padBefore[dim] : 0;
+        currIndex[dim] = Math.abs(tt.shape[dim] + (-1 - before % tt.shape[dim])) % tt.shape[dim];
+        for (let s = 0; s < shape[dim]; s++) {
+            currIndex[dim] = (currIndex[dim] + 1) % tt.shape[dim];
+
+            if (dim + 1 === tt.rank) {
+                let val = tt.getExplicit(currIndex);
+                for (let g = 0; g < strides[dim]; g++) {
+                    values.push(val);
+                }
+            } else {
+                wrap(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
+            }
         }
-        return [oIndex, pInd];
+        currIndex.pop();
+        return values;
     }
 
-    $T.pad = function(padAfter, padBefore, padVals, inplace=true) {
-        if (padAfter.length !== padBefore.length) {
-            throw new Error(`List of padding before each dimension ${ padBefore.length }
-             and list of padding after each dimension ${ padAfter.length } lengths do not match`);
-        }
-        let newRank = padAfter.length > this.rank ? padAfter.length : this.rank,
-            newShape = [],
-            newData = [],
-            newStrides;
+    function reflect(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
+
+    }
+    // function getPaddingValues(padAfter, padBefore, padType, constant) {
+    //     let values = [];
+
+    //     switch (padType) {
+    //         case(0) :
+    //             values = initArray([])
+    //     }
+    // }
+
+    // $T.__padHelper = function(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padType, constant) {
+    //     for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
+    //         padded[pInd++] = padVals[0];
+    //     }
+        
+    //     //Base Case: If this is the final dimension of original shape, add the original data
+    //     if (oShape.length === 1) {  
+    //         for (let c = 0; c < oShape[0]; c++) {        
+    //             if (padBefore.length > 1) {
+    //                 for (let b = 0; b < padBefore[1]; b++) {
+    //                     padded[pInd++] = padVals[0];
+    //                 }
+    //             }
+    //             padded[pInd++] = orig[oIndex++];
+    //             if (padAfter.length > 1) {
+    //                 for (let a = 0; a < padAfter[1]; a++) {
+    //                     padded[pInd++] = padVals[0];
+    //                 }
+    //             }
+    //         }
+    //     } else {
+    //         for (let c = 0; c < oShape[0]; c++) {
+    //             let indices = this.__padHelper(
+    //                 orig, oShape.slice(1), oIndex,
+    //                 padded, pStrides.slice(1), pInd,
+    //                 padAfter.slice(1), padBefore.slice(1), padVals.slice(1)
+    //             );
+    //             oIndex = indices[0];
+    //             pInd = indices[1];
+    //         }
+    //     }
+
+    //     for (let a = 0; a < padAfter[0] * pStrides[0]; a++) {
+    //         padded[pInd++] = padVals[0];
+    //     }
+    //     return [oIndex, pInd];
+    // }
+
+    $T.pad = function(padBefore, padAfter, inplace=true, padType='constant', constant=undefined) {
+        let newRank = this.rank;
+        if (padAfter.length > newRank) newRank = padAfter.length;
+        if (padBefore.length > newRank) newRank = padBefore.length;
+        let newShape = [];
+        let newData = [];
+        let newStrides;
+        let padValues;
 
         for (let dim = 0; dim < newRank; dim++) {
-            let before = dim >= padBefore ? 0 : padBefore[dim],
-                after = dim >= padAfter ? 0 : padAfter[dim],
-                curr = dim >= this.rank ? 1 : this.shape[dim];
+            let before = padBefore[dim] ? padBefore[dim] : 0,
+                after = padAfter[dim] ? padAfter[dim] : 0,
+                curr = this.shape[dim] ? this.shape[dim] : 1;
             newShape[dim] = curr + before + after;
         }
-        newStrides = stridesFrom(newShape);
 
-        this.__padHelper(this.data, this.shape, 0, newData, newStrides, 0, padAfter, padBefore, padVals);
+        newStrides = stridesFrom(newShape);
+        //padValues = getPaddingValues(padAfter, padBefore, padType, constant);
+
+        wrap(this, [], 0, newData, newShape, newStrides, padAfter, padBefore);
         
         if (inplace) {
             this.data = newData;

@@ -121,29 +121,29 @@ function loadSignal(dest, destN, origin, fromInd, toInd) {
 }
 
 //Calculates the number of complex multiplications per output sample
-function irFFTSizeCost(size, radix, m) {
-    return (size * (radix + 1)) / (size - m + 1);
+function irFFTSizeCost(size, exponent, m) {
+    return (size * (exponent + 1)) / (size - m + 1);
 }
 
 //Finds optimal FFT size for an impulse response of length m. 
 function optFFTSize(m) {
     let size = 2;
-    let radix = 1;
+    let exponent = 1;
     while (size < m) {
         size *= 2;
-        radix++;
+        exponent++;
     }
     let cost = Infinity;
-    while (cost > irFFTSizeCost(size * 2, radix + 1, m)) {
+    while (cost > irFFTSizeCost(size * 2, exponent + 1, m)) {
         size *= 2;
-        radix++;
-        cost = irFFTSizeCost(size, radix, m);
+        exponent++;
+        cost = irFFTSizeCost(size, exponent, m);
     }
     return size;
 }
 
 
-function convolveReal(signal, ir, fftSize=0) {
+function convolveReal(signal, ir) {
     let n = signal.length;
     let m = ir.length;
     let fftSize = optFFTSize(m);
