@@ -1,6 +1,7 @@
 'use strict';
 const { sizeFrom, stridesFrom, isShape, toNestedArray, initArray } = require('./utility/array_util.js');
 const { reduceRangedIndex, reducedShape, trimRangedIndex, isRangedIndex } = require('./utility/rangedindex_util.js');
+const PadHelpers = require('./tensorpad.js');
 
 const Tensor = (function() {
     function Tensor(shape, data) {
@@ -153,6 +154,14 @@ const Tensor = (function() {
         this.data[dataIndex] = value;
     }
 
+    $T.isValidIndex = function(dataIndex) {
+        for (let i = 0; i < dataIndex.length; i++) {
+            if (dataIndex[i] < 0 || dataIndex[i] >= this.shape[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
     // $T.__padHelper = function(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padVals) {
     //     for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
     //         padded[pInd++] = padVals[0];
@@ -222,28 +231,7 @@ const Tensor = (function() {
     //     return newData;
     // }
 
-    function wrap(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
-        let before = padBefore[dim] ? padBefore[dim] : 0;
-        currIndex[dim] = Math.abs(tt.shape[dim] + (-1 - before % tt.shape[dim])) % tt.shape[dim];
-        for (let s = 0; s < shape[dim]; s++) {
-            currIndex[dim] = (currIndex[dim] + 1) % tt.shape[dim];
 
-            if (dim + 1 === tt.rank) {
-                let val = tt.getExplicit(currIndex);
-                for (let g = 0; g < strides[dim]; g++) {
-                    values.push(val);
-                }
-            } else {
-                wrap(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-            }
-        }
-        currIndex.pop();
-        return values;
-    }
-
-    function reflect(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
-
-    }
     // function getPaddingValues(padAfter, padBefore, padType, constant) {
     //     let values = [];
 
@@ -291,7 +279,11 @@ const Tensor = (function() {
     //     return [oIndex, pInd];
     // }
 
-    $T.pad = function(padBefore, padAfter, inplace=true, padType='constant', constant=undefined) {
+    $T.pad = function(padBefore, padAfter, inplace=true, padType='constant', constant=0) {
+        let padFunction = PadHelpers[padType];
+        if (!padFunction) {
+            throw new Error(`Padding Type ${padType} is not a valid type of padding Tensors.`);
+        }
         let newRank = this.rank;
         if (padAfter.length > newRank) newRank = padAfter.length;
         if (padBefore.length > newRank) newRank = padBefore.length;
@@ -308,9 +300,8 @@ const Tensor = (function() {
         }
 
         newStrides = stridesFrom(newShape);
-        //padValues = getPaddingValues(padAfter, padBefore, padType, constant);
 
-        wrap(this, [], 0, newData, newShape, newStrides, padAfter, padBefore);
+        padFunction(this, [], 0, newData, newShape, newStrides, padAfter, padBefore, constant);
         
         if (inplace) {
             this.data = newData;

@@ -35,11 +35,11 @@ img.src = 'img/flowers.jpg';
 img.onload = function() {
     console.log("hi");
 
-    let data = [0,1,2,3,4,5,6,7,8,9,10,11];
+    let data = [0,1,2,3,4,5,6,7,8];
     console.log(data);
-    let tt = new Tensor([2,3,2], data);
+    let tt = new Tensor([3, 3], data);
     console.log(tt);
-    tt.pad([1], [1]);
+    console.log(tt.pad([4, 4], [4, 4], true, "constant"));
     console.log(tt.toNestedArray());
     // console.log("settring [], 0,2 " + tt.set([[], [0, 2]], [9,1,9,1,9,1]));
     // tt.pad([1,1], [1,1], [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
