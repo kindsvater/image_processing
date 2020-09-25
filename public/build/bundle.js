@@ -154,7 +154,7 @@ module.exports = {
     XYZ,
 }
 
-},{"./utility/num_util.js":15,"./utility/type_util.js":17}],2:[function(require,module,exports){
+},{"./utility/num_util.js":14,"./utility/type_util.js":16}],2:[function(require,module,exports){
 const { zeros, initArray } = require("./utility/array_util.js");
 const { roundTo } = require('./utility/num_util.js');
 
@@ -237,7 +237,7 @@ module.exports = {
     impulse,
     psf
 }
-},{"./utility/array_util.js":14,"./utility/num_util.js":15}],3:[function(require,module,exports){
+},{"./utility/array_util.js":13,"./utility/num_util.js":14}],3:[function(require,module,exports){
 //Calculates and returns the magnitude (spatial length) of a vector.
 const mag = vector => Math.sqrt(vector.reduce((acc, curr) => acc + (curr * curr), 0));
 //A and B are both N length vectors. Returns the angle in Radians between them.
@@ -561,7 +561,7 @@ module.exports = {
     FrequencyDist,
     ProbabilityDist,
 };
-},{"./utility/array_util.js":14}],5:[function(require,module,exports){
+},{"./utility/array_util.js":13}],5:[function(require,module,exports){
 'use strict';
 const { RGB, RGBA } = require('./rgb.js');
 const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./srgb.js');
@@ -572,6 +572,7 @@ const { isPowerOfTwo } = require('./utility/type_util.js');
 const { RGBImage } = require('./rgbimage.js');
 const { convolveComplex } = require('./signal.js');
 const { FrequencyDist } = require('./histogram.js');
+const { Tensor } = require('./tensor.js');
 
 //Given an RGBA image, equalizes the lightness of the image between the minimum and maximum values
 function equalizeImgLight(realImage, min, max) {
@@ -600,132 +601,132 @@ function equalizeImgLight(realImage, min, max) {
     return new RGBImage(equalData, realImage.width, true);
 }
 
-// //Use when performing a transfrom on multi-channel flat image in place.
-// //Translates the abstract index n in the input signal to its actual index in the image. 
-// function makeFFTIndex(si, dimIndex, isCol, chan) {
-//     let tensorIndex = [0,0,chan];
-//     tensorIndex[+isCol] = dimIndex;
-//     tensorIndex[+!isCol] = si;
-//     return tensorIndex;
-// }
+//Use when performing a transfrom on multi-channel flat image in place.
+//Translates the abstract index n in the input signal to its actual index in the image. 
+function makeFFTIndex(si, dimIndex, isCol, chan) {
+    let tensorIndex = [0,0,chan];
+    tensorIndex[+isCol] = dimIndex;
+    tensorIndex[+!isCol] = si;
+    return tensorIndex;
+}
 
-// function radix2FFTImage(complexImage, dimIndex, isCol=false, chans=3) {
-//     let ReX = complexImage.real,
-//         ImX = complexImage.imag,
-//         signalLength = isCol ? complexImage.height() : complexImage.width(),
-//         power = bankRound(Math.log2(signalLength)),
-//         j = signalLength / 2,
-//         tempR,
-//         tempI,
-//         c;
+function radix2FFTImage(complexImage, dimIndex, isCol=false, chans=3) {
+    let ReX = complexImage.real,
+        ImX = complexImage.imag,
+        signalLength = isCol ? complexImage.height() : complexImage.width(),
+        power = bankRound(Math.log2(signalLength)),
+        j = signalLength / 2,
+        tempR,
+        tempI,
+        c;
 
-//     //Sort in Reverse Bit order
-//     for (let i = 1; i < signalLength; i++) {
-//         if (i < j) {
-//             let ti = ReX._toDataIndex(makeFFTIndex(i, dimIndex, isCol, 0));
-//             let tj = ReX._toDataIndex(makeFFTIndex(j, dimIndex, isCol, 0));
-//             for (c = 0; c < chans; c++) {
-//                 tempR = ReX.getAtDI(tj);
-//                 tempI = ImX.getAtDI(tj);
-//                 ReX.getAtDI(tj) = ReX.getAtDI(ti);
-//                 ImX.getAtDI(tj) = ImX.getAtDI(ti);
-//                 ReX.getAtDI(ti) = tempR;
-//                 ImX.getAtDI(ti) = tempI;
-//                 ti = ReX._incrementDataIndex(ti, 1, 2);
-//                 tj = ReX._incrementDataIndex(tj, 1, 2);
-//             }
-//         }
-//         let k = signalLength / 2;
-//         while (k <= j) {
-//             j = j - k;
-//             k = k / 2;
-//         }
-//         j = j + k;
-//     }
+    //Sort in Reverse Bit order
+    for (let i = 1; i < signalLength; i++) {
+        if (i < j) {
+            let ti = ReX._toDataIndex(makeFFTIndex(i, dimIndex, isCol, 0));
+            let tj = ReX._toDataIndex(makeFFTIndex(j, dimIndex, isCol, 0));
+            for (c = 0; c < chans; c++) {
+                tempR = ReX.getAtDI(tj);
+                tempI = ImX.getAtDI(tj);
+                ReX.setAtDI(tj, ReX.getAtDI(ti));
+                ImX.setAtDI(tj, ImX.getAtDI(ti));
+                ReX.setAtDI(ti, tempR);
+                ImX.setAtDI(ti, tempI);
+                ti = ReX._incrementDataIndex(ti, 1, 2);
+                tj = ReX._incrementDataIndex(tj, 1, 2);
+            }
+        }
+        let k = signalLength / 2;
+        while (k <= j) {
+            j = j - k;
+            k = k / 2;
+        }
+        j = j + k;
+    }
 
-//     //Loop for each stage
-//     for (let stage = 1; stage <= power; stage++) {  
-//         let spectraSize = Math.pow(2, stage);      
-//         let halfSpectra = spectraSize / 2;
-//         let ur = 1;
-//         let ui = 0;
-//         //calculate sine and cosine values
-//         let sr = Math.cos(Math.PI / halfSpectra);
-//         let si = Math.sin(Math.PI / halfSpectra);
+    //Loop for each stage
+    for (let stage = 1; stage <= power; stage++) {  
+        let spectraSize = Math.pow(2, stage);      
+        let halfSpectra = spectraSize / 2;
+        let ur = 1;
+        let ui = 0;
+        //calculate sine and cosine values
+        let sr = Math.cos(Math.PI / halfSpectra);
+        let si = Math.sin(Math.PI / halfSpectra);
 
-//         //Loop for each Sub-DTF
-//         for (j = 1; j <= halfSpectra; j++) {
-//             //Loop for each Butterfly
-//             for (let i = j - 1; i < signalLength; i += spectraSize) {
-//                 let ip = ReX._toDataIndex(makeFFTIndex(i + halfSpectra, dimIndex, isCol, 0));
-//                 let ti = ReX._toDataIndex(makeFFTIndex(i, dimIndex, isCol, 0));
-//                 //Butterfly calculation for each channel's signal
-//                 for (c = 0; c < chans; c++) {
-//                     tempR = ReX.getAtDI(ip) * ur - ImX.getAtDI(ip) * ui;
-//                     tempI = ReX.getAtDI(ip) * ui + ImX.getAtDI(ip) * ur;
-//                     ReX.getAtDI(ip) = ReX.getAtDI(ti) - tempR;
-//                     ImX.getAtDI(ip) = ImX.getAtDI(ti) - tempI;
-//                     ReX.getAtDI(ti) = ReX.getAtDI(ti) + tempR;
-//                     ImX.getAtDI(ti) = ImX.getAtDI(ti) + tempI;
-//                     ip = ReX._incrementDataIndex(ip, 1, 2);
-//                     ti = ReX._incrementDataIndex(ti, 1, 2);
-//                 }
-//             }
-//             tempR = ur;
-//             ur = tempR * sr - ui * si;
-//             ui = tempR * si + ui * sr;
-//         }
-//     }
-//     return complexImage;
-// }
+        //Loop for each Sub-DTF
+        for (j = 1; j <= halfSpectra; j++) {
+            //Loop for each Butterfly
+            for (let i = j - 1; i < signalLength; i += spectraSize) {
+                let ip = ReX._toDataIndex(makeFFTIndex(i + halfSpectra, dimIndex, isCol, 0));
+                let ti = ReX._toDataIndex(makeFFTIndex(i, dimIndex, isCol, 0));
+                //Butterfly calculation for each channel's signal
+                for (c = 0; c < chans; c++) {
+                    tempR = ReX.getAtDI(ip) * ur - ImX.getAtDI(ip) * ui;
+                    tempI = ReX.getAtDI(ip) * ui + ImX.getAtDI(ip) * ur;
+                    ReX.setAtDI(ip, ReX.getAtDI(ti) - tempR);
+                    ImX.setAtDI(ip, ImX.getAtDI(ti) - tempI);
+                    ReX.setAtDI(ti, ReX.getAtDI(ti) + tempR);
+                    ImX.setAtDI(ti, ImX.getAtDI(ti) + tempI);
+                    ip = ReX._incrementDataIndex(ip, 1, 2);
+                    ti = ReX._incrementDataIndex(ti, 1, 2);
+                }
+            }
+            tempR = ur;
+            ur = tempR * sr - ui * si;
+            ui = tempR * si + ui * sr;
+        }
+    }
+    return complexImage;
+}
 
-// function chirpZTransformImage(complexImage, dimIndex, isCol=false, chans=3) {
-//     let ReX = complexImage.real,
-//         ImX = complexImage.imag;
-//         signalLength = isCol ? complexImage.height() : complexImage.width(),
-//         powerOf2 = 1;  
-//     while (powerOf2 < signalLength * 2 + 1) powerOf2 *= 2;
-//     //Perform the following Z-Transform for all channels
-//     for (let c of chans) {
-//         let tcos = [];
-//         let tsin = [];
-//         let ReA = zeros([powerOf2], true);
-//         let ImA = zeros([powerOf2], true);
-//         let ReB = zeros([powerOf2], true);
-//         let ImB = zeros([powerOf2], true);
+function chirpZTransformImage(complexImage, dimIndex, isCol=false, chans=3) {
+    let ReX = complexImage.real,
+        ImX = complexImage.imag;
+        signalLength = isCol ? complexImage.height() : complexImage.width(),
+        powerOf2 = 1;  
+    while (powerOf2 < signalLength * 2 + 1) powerOf2 *= 2;
+    //Perform the following Z-Transform for all channels
+    for (let c of chans) {
+        let tcos = [];
+        let tsin = [];
+        let ReA = zeros([powerOf2], true);
+        let ImA = zeros([powerOf2], true);
+        let ReB = zeros([powerOf2], true);
+        let ImB = zeros([powerOf2], true);
 
-//         for (let si = 0; si < signalLength; si++) {
-//             let j = si * si % (signalLength * 2),
-//                 ti = ReX._toDataIndex(makeFFTIndex(si, dimIndex, isCol, c));
-//             tcos[si] = Math.cos(Math.PI * j / signalLength);
-//             tsin[si] = Math.sin(Math.PI * j / signalLength);
-//             ReA[si] = ReX.getAtDI(ti) * tcos[si] + ImX.getAtDI(ti) * tsin[si];
-//             ImA[si] = ImX.getAtDI(ti) * tcos[si] - ReX.getAtDI(ti) * tsin[si];
-//         }
-//         //Pad with zeros so that length is radix-2 number M
-//         for (let sigPadIndex = signalLength; sigPadIndex < powerOf2; sigPadIndex++) {
-//             ReA[sigPadIndex] = 0;
-//             ImA[sigPadIndex] = 0;
-//         }
+        for (let si = 0; si < signalLength; si++) {
+            let j = si * si % (signalLength * 2),
+                ti = ReX._toDataIndex(makeFFTIndex(si, dimIndex, isCol, c));
+            tcos[si] = Math.cos(Math.PI * j / signalLength);
+            tsin[si] = Math.sin(Math.PI * j / signalLength);
+            ReA[si] = ReX.getAtDI(ti) * tcos[si] + ImX.getAtDI(ti) * tsin[si];
+            ImA[si] = ImX.getAtDI(ti) * tcos[si] - ReX.getAtDI(ti) * tsin[si];
+        }
+        //Pad with zeros so that length is radix-2 number M
+        for (let sigPadIndex = signalLength; sigPadIndex < powerOf2; sigPadIndex++) {
+            ReA[sigPadIndex] = 0;
+            ImA[sigPadIndex] = 0;
+        }
 
-//         ReB[0] = tcos[0];
-//         ImB[0] = tsin[0];
-//         for (let si = 1; si < signalLength; si++) {
-//             ReB[si] = tcos[si];
-//             ImB[si] = tsin[si];
-//             ReB[powerOf2 - si] = tcos[si];
-//             ImB[powerOf2 - si] = tsin[si];
-//         }
+        ReB[0] = tcos[0];
+        ImB[0] = tsin[0];
+        for (let si = 1; si < signalLength; si++) {
+            ReB[si] = tcos[si];
+            ImB[si] = tsin[si];
+            ReB[powerOf2 - si] = tcos[si];
+            ImB[powerOf2 - si] = tsin[si];
+        }
 
-//         convolveComplex(ReA, ImA, ReB, ImB);
-//         for (let si = 0; si < signalLength; si++) {
-//             let ti = ReX._toDataIndex(makeFFTIndex(si, dimIndex, isCol, c));
-//             ReX.setAtDI(ti, ReA[i] * tcos[i] + ImA[i] * tsin[i]);
-//             ImX.setAtDI(ti, ImA[i] * tcos[i] - ReA[i] * tsin[i]);
-//         }
-//     }
-//     return complexImage;
-// }
+        convolveComplex(ReA, ImA, ReB, ImB);
+        for (let si = 0; si < signalLength; si++) {
+            let ti = ReX._toDataIndex(makeFFTIndex(si, dimIndex, isCol, c));
+            ReX.setAtDI(ti, ReA[i] * tcos[i] + ImA[i] * tsin[i]);
+            ImX.setAtDI(ti, ImA[i] * tcos[i] - ReA[i] * tsin[i]);
+        }
+    }
+    return complexImage;
+}
 
 function FFT1DImage(complexImage, dimIndex, isCol=false, chans) {
     let signalLength = isCol ? complexImage.height() : complexImage.width();
@@ -740,17 +741,17 @@ function FFT1DImage(complexImage, dimIndex, isCol=false, chans) {
     return complexImage;
 }
 
-// function FFT2DFromComplexImage(complexImage, chans) {
-//     //Take FFT of rows and store in real and imaginary images.
-//     for (let row = 0; row < complexImage.height(); row++) {
-//         FFT1DImage(complexImage, row, false, chans);
-//     }
-//     //Take FFT of each column
-//     for (let col = 0; col < complexImage.width(); col++) {
-//         FFT1DImage(complexImage, col, true, chans);
-//     }
-//     return complexImage;
-// }
+function FFT2DFromComplexImage(complexImage, chans) {
+    //Take FFT of rows and store in real and imaginary images.
+    for (let row = 0; row < complexImage.height(); row++) {
+        FFT1DImage(complexImage, row, false, chans);
+    }
+    //Take FFT of each column
+    for (let col = 0; col < complexImage.width(); col++) {
+        FFT1DImage(complexImage, col, true, chans);
+    }
+    return complexImage;
+}
 
 /** Calculates Fourier Transform of a 2D image represented as one flat multi-channel array.
  * @param   {Object}  rgbImage Instance of the RGBImage class.
@@ -761,18 +762,21 @@ function FFT1DImage(complexImage, dimIndex, isCol=false, chans) {
  * @returns {Array}  ComplexSignal.imag The imaginary component of the signal in the freq domain.
 **/
 function FFT2DFromRealImage(rgbImage, chans, inPlace=true) {
+    let height = rgbImage.shape[0];
+    let width = rgbImage.shape[1];
+
     let ReX = inPlace ? 
         rgbImage : 
-        new RGBImage(rgbimage.data.slice(0), rgbImage.width(), rgbImage.height());
+        new RGBImage(rgbimage.data.slice(0), width, height);
     let ImX = new Tensor(rgbImage.shape, zeros(rgbImage.shape, true));
     let complexImage = {
         real : ReX,
         imag : ImX,
         height : () => {
-            ReX.height();
+            ReX.shape[0];
         },
         width : () => {
-            ReX.width();
+            ReX.shape[1];
         }
     }
     return FFT2DFromComplexImage(complexImage, chans);
@@ -805,96 +809,57 @@ function inverseFFT2DImage(complexImage, chans) {
     return { complexImage };
 }
 
-// function multiplyFreqImage(complexX, copmlexH, chans, inPlace=false) {
-//     if (!max) max = ReX.length;
-//     let ReY = inPlace ? ReX : [],
-//         ImY = inPlace ? ImX : [];
+function multiplyFreqImage(complexX, copmlexH, chans, inPlace=false) {
+    if (!max) max = ReX.length;
+    let ReY = inPlace ? ReX : [],
+        ImY = inPlace ? ImX : [];
 
-//     if (inPlace) {
-//         let temp;
-//         for (let i = min; i < max; i++) {
-//             temp = ReX[i] * ReH[i] - ImX[i] * ImH[i]; 
-//             ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
-//             ReY[i] = temp;
-//         }
-//     } else {
-//         for (let i = min; i < max; i++) {
-//             ReY[i] = ReX[i] * ReH[i] - ImX[i] * ImH[i];
-//             ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
-//         }
-//     }
-//     return { "ReX" : ReY, "ImX" : ImY }
-// }
+    if (inPlace) {
+        let temp;
+        for (let i = min; i < max; i++) {
+            temp = ReX[i] * ReH[i] - ImX[i] * ImH[i]; 
+            ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+            ReY[i] = temp;
+        }
+    } else {
+        for (let i = min; i < max; i++) {
+            ReY[i] = ReX[i] * ReH[i] - ImX[i] * ImH[i];
+            ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+        }
+    }
+    return { "ReX" : ReY, "ImX" : ImY }
+}
 
+function FFTConvolution(img, psf) {
+    let FFTHeight = nextPowerOf2(img.height() * 2 - 1);
+    let FFTWidth = nextPowerOf2(img.width() * 2 - 1);
 
+    let imgPaddingAfter = [
+        Math.floor((FFTHeight - img.height()) / 2),
+        Math.floor((FFTWidth - img.width()) / 2)
+    ];
+    let imgPaddingBefore = [
+        Math.ceil((FFTHeight - img.height()) / 2),
+        Math.ceil((FFTWIdht - img.width()) / 2)
+    ];
+    let psfPaddingAfter = [
+        Math.floor((FFTHeight - psf.shape[0]) / 2),
+        Math.floor((FFTWidth - psf.shape[1]) / 2)
+    ];
+    let psfPaddingBefore = [
+        Math.ceil((FFTHeight - psf.shape[0]) / 2),
+        Math.ceil((FFTWidth - psf.shape[1]) / 2)
+    ];
+    img.pad(imgPaddingBefore, imgPaddingAfter, true, 'constant', 0);
+    psf.pad(psfPaddingBefore, psfPaddingAfter, true, 'constant', 0);
 
-// function depadRealImage(img, pWidth, chans, minusWidth, minusHeight) {
-//     let ccTotal = img.length;
-//     let pHeight = ccTotal / pWidth / chans,
-//         newRows = pHeight - minusHeight;
-//         newCols = pWidth - minusWidth,
-//         endIndex = newCols * chans;
-//         colChansRmv = minusWidth * chans;
-//         currIndex = endIndex + colChansRmv;
-//         for (let r = 1; r < newRows; r++) {
-//             let sectionLen = newCols * chans;
-//             for (let c = 0; c < sectionLen; c++) {
-//                 img[endIndex] = img[currIndex];
-//                 endIndex++;
-//                 currIndex++;
-//             }
-//             currIndex += colChansRmv;
-//         }
-//         img.splice(endIndex);
-//         return img;
-// }
+    let complexFreqImg = FFT2DFromRealImage(img, 3, true);
+    let complexFreqPSF = FFT2DFromRealImage(psf, 1, true);
 
-// function FFTConvolution(img, psf) {
-//     let FFTHeight = nextPowerOf2(img.height() * 2 - 1);
-//     let FFTWidth = nextPowerOf2(img.width() * 2 - 1);
+    let convolvedFreqImg = multiplyFreqImage(complexFreqImg, complexFreqPSF, 3, inPlace);
+    return  depadRealImage( inverseFFT2DImage(convolvedFreqImg, 3).real , width, 3, min);
+}
 
-//     let imgPaddingAfter = [
-//         Math.floor((FFTHeight - img.height()) / 2),
-//         Math.floor((FFTWidth - img.width()) / 2)
-//     ];
-//     let imgPaddingBefore = [
-//         Math.ceil((FFTHeight - img.height()) / 2),
-//         Math.ceil((FFTWIdht - img.width()) / 2)
-//     ];
-//     let psfPaddingAfter = [
-//         heightPowerOf2 - psf.shape[0],
-//         widthPowerOf2 - psf.shape[1]
-//     ];
-//     img.pad()
-// }
-
-// function pad2DSignal( signal, toHeight, toWidth, center=true, paddingType=0, padValue=undefined) {
-//     let signalHeight = signal.shape[0];
-//     let sigWidth = signal.shape[1];
-//     let padBefore = [0, 0];
-//     let padAfter;
-
-//     if (center) {
-//         padBefore = [
-//             Math.ceil((FFTHeight - signalHeight) / 2),
-//             Math.ceil((FFTWIdht - signalWidth) / 2)
-//         ];
-//         padAfter = [
-//             Math.floor((FFTHeight - signalHeight) / 2),
-//             Math.floor((FFTWidth - signalWidth) / 2)
-//         ];
-//     } else {
-//         padAfter = [
-//             toHeight - signalHeight,
-//             toWidth - signalWidth
-//         ];
-//     }
-
-//     // switch (paddingType) {
-//     //     case 0: 
-//     //         signal.pad
-//     // }
-// }
 // function convolveRealImage(img, psf, edge="mirror") {
 //     let output = [];
 //         finalHeight = img.height() + psf.rows() - 1,
@@ -989,7 +954,7 @@ module.exports = {
     inverseFFT2DImage,
     FFT1DImage,
 }
-},{"./cie.js":1,"./histogram.js":4,"./rgb.js":8,"./rgbimage.js":9,"./signal.js":10,"./srgb.js":11,"./utility/array_util.js":14,"./utility/num_util.js":15,"./utility/type_util.js":17}],6:[function(require,module,exports){
+},{"./cie.js":1,"./histogram.js":4,"./rgb.js":8,"./rgbimage.js":9,"./signal.js":10,"./srgb.js":11,"./tensor.js":12,"./utility/array_util.js":13,"./utility/num_util.js":14,"./utility/type_util.js":16}],6:[function(require,module,exports){
 const { RGBImage } = require('./rgbimage.js');
 const { equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageprocessing.js');
 const { RGB, RGBA } = require('./rgb.js');
@@ -1375,7 +1340,7 @@ function displayHistogram(selector, data, color, height, width) {
     svg.append("g").call(yAxis);
 }
 
-},{"./cie.js":1,"./filter.js":2,"./imageprocessing.js":5,"./randomgeneration.js":7,"./rgb.js":8,"./rgbimage.js":9,"./signal.js":10,"./srgb.js":11,"./tensor.js":12,"./utility/array_util.js":14,"./utility/num_util.js":15}],7:[function(require,module,exports){
+},{"./cie.js":1,"./filter.js":2,"./imageprocessing.js":5,"./randomgeneration.js":7,"./rgb.js":8,"./rgbimage.js":9,"./signal.js":10,"./srgb.js":11,"./tensor.js":12,"./utility/array_util.js":13,"./utility/num_util.js":14}],7:[function(require,module,exports){
 const { clampTo } = require('./utility/num_util.js');
 
 //Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
@@ -1501,7 +1466,7 @@ module.exports.gaussGray = gaussGray;
 module.exports.randIntArray = randIntArray;
 
 
-},{"./utility/num_util.js":15}],8:[function(require,module,exports){
+},{"./utility/num_util.js":14}],8:[function(require,module,exports){
 const { invert, dot } = require('./flatimage/linear.js');
 const redLevel = (rgbColor) => rgbColor[0];
 const greenLevel = (rgbColor) => rgbColor[1];
@@ -2155,7 +2120,7 @@ module.exports = {
     multiplyFreq,
     divideFreq
 }
-},{"./flatimage/linear":3,"./utility/array_util.js":14,"./utility/num_util.js":15,"./utility/type_util.js":17}],11:[function(require,module,exports){
+},{"./flatimage/linear":3,"./utility/array_util.js":13,"./utility/num_util.js":14,"./utility/type_util.js":16}],11:[function(require,module,exports){
 const { multiply } = require('./flatimage/linear.js');
 const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
 
@@ -2302,17 +2267,26 @@ module.exports = {
 
 },{"./flatimage/linear.js":3,"./rgb.js":8}],12:[function(require,module,exports){
 'use strict';
-const { sizeFrom, stridesFrom, isShape, toNestedArray, initArray } = require('./utility/array_util.js');
+const { sizeFrom, stridesFrom, isShape, toNestedArray } = require('./utility/array_util.js');
 const { reduceRangedIndex, reducedShape, trimRangedIndex, isRangedIndex } = require('./utility/rangedindex_util.js');
-const PadHelpers = require('./tensorpad.js');
 
 const Tensor = (function() {
     function Tensor(shape, data) {
         if(!isShape(shape)) {
-            throw new TypeError('Shape is not well-formed. Shape should be an array of integers');
+            throw new TypeError(
+                `Provided shape [${shape}] is not well-formed. \n` + 
+                `Shape must be an array of positive integers.`
+            );
+        }
+        let size = sizeFrom(shape);
+        if (size !== data.length) {
+            throw new Error(
+                `Provided Shape [${shape}] does not describe data ` +
+                `of size ${data.length}.\nShape describes data of size ${size}.`
+            );
         }
         this.shape = shape;
-        this.size = sizeFrom(shape);
+        this.size = size;
         this.strides = stridesFrom(shape);
         this.data = data;
         this.rank = shape.length;
@@ -2327,7 +2301,9 @@ const Tensor = (function() {
         for (let i = 0; i < dims; i++) {
             dataIndex += this.strides[i] * tensorIndex[i];
         }
-        if (dataIndex >= this.size || dataIndex < 0) throw new Error('Index out of range');
+        if (dataIndex >= this.size || dataIndex < 0) throw new Error(
+            `Index ${tensorIndex}, is out of range of Tensor with shape [${this.shape}]`
+        );
         return dataIndex;
     }
     
@@ -2371,6 +2347,15 @@ const Tensor = (function() {
                 }
             }
         }
+    }
+
+    $T.isValidIndex = function(dataIndex) {
+        for (let i = 0; i < dataIndex.length; i++) {
+            if (dataIndex[i] < 0 || dataIndex[i] >= this.shape[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     $T.forEachExplicit = function(explicitIndex, callbackFn) {
@@ -2429,7 +2414,8 @@ const Tensor = (function() {
     }
     
     $T.set = function(rangedIndex, values) {
-        if (!Array.isArray(values)) values = [values]; //If is a single value, wrap in array.
+        //If setting a single value, wrap in array.
+        if (!Array.isArray(values)) values = [values]; 
         let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
         let requiredInputLength;
         let valIndex = 0;
@@ -2443,7 +2429,8 @@ const Tensor = (function() {
 
         if (values.length !== requiredInputLength) {
             throw new Error(
-                `Number of values, ${values.length}, does not meet the required amount, ${requiredInputLength}`
+                `Number of values, ${values.length}, ` + 
+                `does not meet the number of indices set: ${requiredInputLength}`
             );
         }
         
@@ -2451,170 +2438,47 @@ const Tensor = (function() {
             this.data[i] = values[valIndex];
             valIndex++;
         });
+        return this;
     }
 
     $T.setAtDI = function(dataIndex, value) {
         this.data[dataIndex] = value;
+        return this;
     }
 
-    $T.isValidIndex = function(dataIndex) {
-        for (let i = 0; i < dataIndex.length; i++) {
-            if (dataIndex[i] < 0 || dataIndex[i] >= this.shape[i]) {
-                return false;
+    $T.update = function(shape, data=null) {
+        if(!isShape(shape)) {
+            throw new TypeError(
+                `Provided shape [${shape}] is not well-formed. \n` + 
+                `Shape must be an array of positive integers.`
+            );
+        }
+        let newStrides = stridesFrom(shape);
+        let newSize = sizeFrom(shape);
+
+        if (data) {
+            if (newSize !== data.length) {
+                throw new Error(
+                    `Provided Shape [${shape}] does not describe new data ` +
+                    `of size ${data.length}.` + 
+                    `\nShape describes data of size ${newSize}.`
+                );
+            }
+            this.data = data;       
+        } else {
+            if (newSize !== this.data.length) {
+                throw new Error(
+                    `Provided Shape [${shape}] does not describe Tensor data. ` +
+                    `\nShape describes data of ${newSize}; ` +
+                    `Current Tensor data is of size ${this.data.length}.`
+                );
             }
         }
-        return true;
-    }
-    // $T.__padHelper = function(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padVals) {
-    //     for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
-    //         padded[pInd++] = padVals[0];
-    //     }
-        
-    //     //Base Case: If this is the final dimension of original shape, add the original data
-    //     if (oShape.length === 1) {  
-    //         for (let c = 0; c < oShape[0]; c++) {        
-    //             if (padBefore.length > 1) {
-    //                 for (let b = 0; b < padBefore[1]; b++) {
-    //                     padded[pInd++] = padVals[0];
-    //                 }
-    //             }
-    //             padded[pInd++] = orig[oIndex++];
-    //             if (padAfter.length > 1) {
-    //                 for (let a = 0; a < padAfter[1]; a++) {
-    //                     padded[pInd++] = padVals[0];
-    //                 }
-    //             }
-    //         }
-    //     } else {
-    //         for (let c = 0; c < oShape[0]; c++) {
-    //             let indices = this.__padHelper(
-    //                 orig, oShape.slice(1), oIndex,
-    //                 padded, pStrides.slice(1), pInd,
-    //                 padAfter.slice(1), padBefore.slice(1), padVals.slice(1)
-    //             );
-    //             oIndex = indices[0];
-    //             pInd = indices[1];
-    //         }
-    //     }
-
-    //     for (let a = 0; a < padAfter[0] * pStrides[0]; a++) {
-    //         padded[pInd++] = padVals[0];
-    //     }
-    //     return [oIndex, pInd];
-    // }
-
-    // $T.pad = function(padAfter, padBefore, inplace=true) {
-    //     if (padAfter.length !== padBefore.length) {
-    //         throw new Error(`List of padding before each dimension ${ padBefore.length }
-    //          and list of padding after each dimension ${ padAfter.length } lengths do not match`);
-    //     }
-    //     let newRank = padAfter.length > this.rank ? padAfter.length : this.rank,
-    //         newShape = [],
-    //         newData = [],
-    //         newStrides;
-
-    //     for (let dim = 0; dim < newRank; dim++) {
-    //         let before = dim >= padBefore ? 0 : padBefore[dim],
-    //             after = dim >= padAfter ? 0 : padAfter[dim],
-    //             curr = dim >= this.rank ? 1 : this.shape[dim];
-    //         newShape[dim] = curr + before + after;
-    //     }
-    //     newStrides = stridesFrom(newShape);
-
-    //     this.__padHelper(this.data, this.shape, 0, newData, newStrides, 0, padAfter, padBefore, padVals);
-        
-    //     if (inplace) {
-    //         this.data = newData;
-    //         this.size = newData.length;
-    //         this.shape = newShape;
-    //         this.strides = newStrides;
-    //         this.rank = newRank;
-    //     }
-
-    //     return newData;
-    // }
-
-
-    // function getPaddingValues(padAfter, padBefore, padType, constant) {
-    //     let values = [];
-
-    //     switch (padType) {
-    //         case(0) :
-    //             values = initArray([])
-    //     }
-    // }
-
-    // $T.__padHelper = function(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padType, constant) {
-    //     for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
-    //         padded[pInd++] = padVals[0];
-    //     }
-        
-    //     //Base Case: If this is the final dimension of original shape, add the original data
-    //     if (oShape.length === 1) {  
-    //         for (let c = 0; c < oShape[0]; c++) {        
-    //             if (padBefore.length > 1) {
-    //                 for (let b = 0; b < padBefore[1]; b++) {
-    //                     padded[pInd++] = padVals[0];
-    //                 }
-    //             }
-    //             padded[pInd++] = orig[oIndex++];
-    //             if (padAfter.length > 1) {
-    //                 for (let a = 0; a < padAfter[1]; a++) {
-    //                     padded[pInd++] = padVals[0];
-    //                 }
-    //             }
-    //         }
-    //     } else {
-    //         for (let c = 0; c < oShape[0]; c++) {
-    //             let indices = this.__padHelper(
-    //                 orig, oShape.slice(1), oIndex,
-    //                 padded, pStrides.slice(1), pInd,
-    //                 padAfter.slice(1), padBefore.slice(1), padVals.slice(1)
-    //             );
-    //             oIndex = indices[0];
-    //             pInd = indices[1];
-    //         }
-    //     }
-
-    //     for (let a = 0; a < padAfter[0] * pStrides[0]; a++) {
-    //         padded[pInd++] = padVals[0];
-    //     }
-    //     return [oIndex, pInd];
-    // }
-
-    $T.pad = function(padBefore, padAfter, inplace=true, padType='constant', constant=0) {
-        let padFunction = PadHelpers[padType];
-        if (!padFunction) {
-            throw new Error(`Padding Type ${padType} is not a valid type of padding Tensors.`);
-        }
-        let newRank = this.rank;
-        if (padAfter.length > newRank) newRank = padAfter.length;
-        if (padBefore.length > newRank) newRank = padBefore.length;
-        let newShape = [];
-        let newData = [];
-        let newStrides;
-        let padValues;
-
-        for (let dim = 0; dim < newRank; dim++) {
-            let before = padBefore[dim] ? padBefore[dim] : 0,
-                after = padAfter[dim] ? padAfter[dim] : 0,
-                curr = this.shape[dim] ? this.shape[dim] : 1;
-            newShape[dim] = curr + before + after;
-        }
-
-        newStrides = stridesFrom(newShape);
-
-        padFunction(this, [], 0, newData, newShape, newStrides, padAfter, padBefore, constant);
-        
-        if (inplace) {
-            this.data = newData;
-            this.size = newData.length;
-            this.shape = newShape;
-            this.strides = newStrides;
-            this.rank = newRank;
-        }
-
-        return newData;
+        this.size = newSize;
+        this.shape = shape;
+        this.strides = newStrides;
+        this.rank = shape.length;
+        return this;
     }
 
     $T.toNestedArray = function() {
@@ -2628,229 +2492,7 @@ module.exports = {
     Tensor
 }
 
-},{"./tensorpad.js":13,"./utility/array_util.js":14,"./utility/rangedindex_util.js":16}],13:[function(require,module,exports){
-function constant(tt, currIndex, dim, values, shape, strides, padAfter, padBefore, constVal) {
-    console.log(currIndex);
-    let before = padBefore[dim] ? padBefore[dim] : 0;
-    let after = padAfter[dim] ? padAfter[dim] : 0;
-    let signalLength = tt.shape[dim];
-    let slmin1 = signalLength - 1;
-
-    for (let b = before; b > 0; b--) {
-        currIndex[dim] = -1;
-
-        if (dim + 1 === tt.rank) {
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(constVal);
-            }
-        } else {
-            constant(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore, constVal);
-        }
-    }
-
-    for (let d = 0; d < signalLength; d++) {
-        currIndex[dim] = d;
-        if (currIndex.length === tt.rank) {
-            console.log(currIndex);
-            let val = tt.isValidIndex(currIndex) ? 
-                tt.getExplicit(currIndex) :
-                constVal;
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            constant(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore, constVal);
-        }
-    }
-    
-    for (let a = 1; a <= after; a++) {
-        currIndex[dim] = -1;
-        if (dim + 1 === tt.rank) {
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(constVal);
-            }
-        } else {
-            constant(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore, constVal);
-        }
-    }
-    currIndex.pop();
-    return values;
-}
-
-function wrap(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
-    let before = padBefore[dim] ? padBefore[dim] : 0;
-    currIndex[dim] = Math.abs(tt.shape[dim] + (-1 - before % tt.shape[dim])) % tt.shape[dim];
-    for (let s = 0; s < shape[dim]; s++) {
-        currIndex[dim] = (currIndex[dim] + 1) % tt.shape[dim];
-
-        if (dim + 1 === tt.rank) {
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            wrap(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-    currIndex.pop();
-    return values;
-}
-
-function reflect(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
-    console.log(currIndex);
-    let before = padBefore[dim] ? padBefore[dim] : 0;
-    let after = padAfter[dim] ? padAfter[dim] : 0;
-    let signalLength = tt.shape[dim];
-    let slmin1 = signalLength - 1;
-
-    for (let b = before; b > 0; b--) {
-        currIndex[dim] = Math.floor(b / slmin1) % 2 ? slmin1 - (b % slmin1) : b % slmin1;
-
-        if (dim + 1 === tt.rank) {
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            reflect(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-
-    for (let d = 0; d < signalLength; d++) {
-        currIndex[dim] = d;
-        if (dim + 1 === tt.rank) {
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            reflect(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-    
-    for (let a = 1; a <= after; a++) {
-        currIndex[dim] = Math.floor(a / slmin1) % 2 ? a % slmin1 : slmin1 - (a % slmin1) ;
-        if (dim + 1 === tt.rank) {
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            reflect(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-
-    currIndex.pop();
-    return values;
-}
-
-function symmetric(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
-    let before = padBefore[dim] ? padBefore[dim] : 0;
-    let after = padAfter[dim] ? padAfter[dim] : 0;
-    let signalLength = tt.shape[dim];
-    let slmin1 = signalLength - 1;
-
-    for (let b = before - 1; b >= 0; b--) {
-        currIndex[dim] = Math.floor(b / signalLength) % 2 ? slmin1 - (b % signalLength) : b % signalLength;
-
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            symmetric(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-
-    for (let d = 0; d < signalLength; d++) {
-        currIndex[dim] = d;
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            symmetric(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-    
-    for (let a = 0; a < after; a++) {
-        currIndex[dim] = Math.floor(a / signalLength) % 2 ? a % signalLength : slmin1 - (a % signalLength) ;
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            symmetric(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-
-    currIndex.pop();
-    return values;
-}
-
-function edge(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
-    let before = padBefore[dim] ? padBefore[dim] : 0;
-    let after = padAfter[dim] ? padAfter[dim] : 0;
-    let signalLength = tt.shape[dim];
-    let slmin1 = signalLength - 1;
-
-    currIndex[dim] = 0;
-    for (let b = before - 1; b >= 0; b--) {
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            edge(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-
-    for (let d = 0; d < signalLength; d++) {
-        currIndex[dim] = d;
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            edge(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-    
-    currIndex[dim] = slmin1;
-    for (let a = 0; a < after; a++) {
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            edge(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-
-    currIndex.pop();
-    return values;
-}
-
-module.exports = {
-    wrap,
-    reflect,
-    symmetric,
-    edge,
-    constant
-}
-},{}],14:[function(require,module,exports){
+},{"./utility/array_util.js":13,"./utility/rangedindex_util.js":15}],13:[function(require,module,exports){
 function isShape(shape) {
     if (!Array.isArray(shape)) return false;
     if (shape.length > 1) {
@@ -2974,7 +2616,7 @@ module.exports = {
     ones,
     identity,
 }
-},{}],15:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 const { isHex } = require('./type_util.js');
 
 function intToHex(int) {
@@ -3037,7 +2679,7 @@ module.exports = {
     nextExponentOf2,
     nextPowerOf2
 }
-},{"./type_util.js":17}],16:[function(require,module,exports){
+},{"./type_util.js":16}],15:[function(require,module,exports){
 'use strict';
 const { stridesFrom } = require('./array_util.js');
 //End operator is Infinity
@@ -3188,7 +2830,7 @@ module.exports = {
     trimRangedIndex,
     reducedShape,
 }
-},{"./array_util.js":14}],17:[function(require,module,exports){
+},{"./array_util.js":13}],16:[function(require,module,exports){
 
 function isString(value) {
     return (typeof value === 'string' || value instanceof String);
