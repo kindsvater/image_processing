@@ -1,6 +1,6 @@
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
-const { clampTo } =  require('./utility/num_util.js');
-const { inNormalUnitInterval } = require('./utility/type_util.js');
+const { clampTo } =  require('./../utility/num_util.js');
+const { inNormalUnitInterval } = require('./../utility/type_util.js');
 
 //Device Invariant Representation of Color. The tristimulus values X, Y, and Z technically
 // range from 0.0000 to infinity, but never exceed 1.2000 in practice. 
@@ -154,9 +154,221 @@ module.exports = {
     XYZ,
 }
 
-},{"./utility/num_util.js":14,"./utility/type_util.js":16}],2:[function(require,module,exports){
-const { zeros, initArray } = require("./utility/array_util.js");
-const { roundTo } = require('./utility/num_util.js');
+},{"./../utility/num_util.js":14,"./../utility/type_util.js":16}],2:[function(require,module,exports){
+const { invert, dot } = require('../utility/linearalg_util.js');
+const redLevel = (rgbColor) => rgbColor[0];
+const greenLevel = (rgbColor) => rgbColor[1];
+const blueLevel = (rgbColor) => rgbColor[2];
+
+RGBA = {
+    color : (r, g, b, a) => [r, g, b, a ? a : 255],
+    redLevel,
+    greenLevel,
+    blueLevel,
+    alphaLevel : (rgbaColor) => rgbaColor[3]
+} 
+RGB = {
+    color : (r, g, b) => [r, g, b],
+    redLevel,
+    greenLevel,
+    blueLevel
+} 
+let averageChannelLevel = (rgbColor) => (rgbColor[0] + rgbColor[1] + rgbColor[2]) / 3;
+XYZconversionMatrix = (primaryCoords, XYZWhite) => {
+    let primXYZ = [
+        [primaryCoords[0][0],primaryCoords[1][0], primaryCoords[2][0]],
+        [primaryCoords[0][1],primaryCoords[1][1], primaryCoords[2][1]],
+        [primaryCoords[0][2],primaryCoords[1][2], primaryCoords[2][2]],
+    ]
+
+    let iPXYZ = invert(primXYZ);
+    let XYZScalars = multiply(iPXYZ, XYZWhite);
+    scaleMatrix = [[XYZScalars[0], 0, 0], [0, XYZScalars[1], 0], [0, 0, XYZScalars[2]]];
+    return multiply(primXYZ, scaleMatrix);
+}
+
+function rgbWhiteToXYZ(whiteCoords) {
+    whiteY = greenLevel(whiteCoords);
+    return whiteCoords.map( cc => cc / whiteY);
+}
+
+let createRGBRelativeLuminance = (XYZconversionMatrix) =>
+    rgb => dot([redLevel(rgb), greenLevel(rgb), blueLevel(rgb)], XYZconversionMatrix[1]);
+
+let gradient = (start, end, step) => {
+    let grad = [];
+
+    for (let i = 0; i < step; i++) {
+        let intenseEnd = i;
+        let intenseStrt = step - i;
+
+        let color = RGBA.color(
+            Math.round((intenseStrt * RGBA.redLevel(start) + intenseEnd * RGBA.redLevel(end)) / step),
+            Math.round((intenseStrt * RGBA.greenLevel(start) + intenseEnd * RGBA.greenLevel(end)) / step),
+            Math.round((intenseStrt * RGBA.blueLevel(start) + intenseEnd * RGBA.blueLevel(end)) / step)
+        );
+
+        grad[i] = color;
+    }
+    return grad;
+}
+
+module.exports = {
+    RGBA,
+    RGB,
+    averageChannelLevel,
+    XYZconversionMatrix,
+    createRGBRelativeLuminance,
+    gradient
+}
+},{"../utility/linearalg_util.js":13}],3:[function(require,module,exports){
+const { multiply } = require('../utility/linearalg_util.js');
+const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
+
+//This matrix is used to convert linearized sRGB color to its corresponding color
+//in the XYZ colorspace. The XYZ color is the matrix product of the 
+//linearized sRGB color vector and the conversion matrix. 
+const sRGBtoXYZMatrix = [
+    [0.41239079926595923, 0.35758433938387785, 0.1804807884018343],
+    [0.21263900587151022, 0.7151686787677557, 0.07219231536073371],
+    [0.019330818715591835,0.11919477979462596, 0.9505321522496606]
+]
+
+const XYZtosRGBMatrix = [
+    [3.2404542, -1.5371385, -0.4985314],
+    [-0.9692660,  1.8760108,  0.0415560],
+    [0.0556434, -0.2040259,  1.0572252]
+]
+
+//Coordinates of sRGB red green and blue primary colors in linearized 3D space. 
+const primaryChromaticityCoordinates = {
+    matrix : [
+        [0.64, 0.33, 0.03],
+        [0.30, 0.60, 0.10],
+        [0.15, 0.06, 0.79]
+    ],
+    obj : {
+        r : {
+            x : 0.64,
+            y : 0.33,
+            z : 0.03
+        },
+        g : {
+            x : 0.30,
+            y : 0.60,
+            z : 0.10
+        },
+        b : {
+            x : 0.15,
+            y : 0.06,
+            z : 0.79
+        }
+    }
+}
+
+//Chromaticity Coordinates of sRGB reference white (CIE Illuminant D65) in linear 3D space.
+const whitepointChroma = {
+    matrix : [0.3127, 0.3290, 0.3583],
+    obj : {
+        x : 0.3127,
+        y : 0.3290,
+        z : 0.3583
+    }
+}
+
+//Given a linearized sRGB color, calculates the Relative Luminence of the color. 
+//Relative Luminence is the Y stimulus in the XYZ colorspace.
+const relativeLuminence = createRGBRelativeLuminance(sRGBtoXYZMatrix);
+
+//Linearizes sRGB gamma-encoded color channel value in unit interval by applying
+// sRGGB gamma decoding step-function. Value returned is in unit interval. 
+function decodeGammaUI(stimulus) {
+    if (stimulus < 0.04045) {
+        return stimulus / 12.92;
+    } else {
+        return Math.pow(((stimulus + 0.055) / 1.055), 2.4);
+    }
+}
+
+//Linearizes sRGB gamma-encoded  8bit color channel value by applying
+// sRGB gamma decoding step function. Value returned is in unit interval.
+function decodeGamma8Bit(colorChannel) {
+    let uiCC = colorChannel / 255;
+    return decodeGammaUI(uiCC);
+}
+
+//From linear stimulus in unit Interval applies sRGB piecewise gamma encoding function .
+// Returned value is in Unit Interval.
+function encodeGammaUI(linStim) {
+    if (linStim < 0.00313080495) {
+        return linStim * 12.92;
+    } else {
+        return Math.pow(linStim, 1 / 2.4) * 1.055 - 0.055;
+    }
+}
+
+//From linear stimulus in unit interval applies sRGB piecewise gamma encoding function .
+// Returned value is 8Bit Integer.
+function encodeGamma8Bit(linStim) {
+    let uiCC = encodeGammaUI(linStim);
+    return Math.round(uiCC * 255); 
+}
+
+//Converts sRGB color to XYZ colorspace.
+function sRGBtoXYZ(rgb) {
+    let linRGB = linearize8Bit(rgb);
+    return multiply(sRGBtoXYZMatrix, linRGB);
+}
+//Linearizes the 8Bit color channels of a gamm-encoded sRGB color.
+function linearize8Bit(rgb) {
+    return rgb.map(cc => decodeGamma8Bit(cc));
+}
+//Gamma-encodes each color channel of a linear sRGB color to 8Bit values.
+function delinearize8Bit(rgb) {
+    return rgb.map(cc => encodeGamma8Bit(cc));
+}
+//Converts XYZ color to Gamma-encoded sRGB
+function XYZtosRGB(xyz) {
+    let linRGB = multiply(XYZtosRGBMatrix, xyz);
+    return delinearize8Bit(linRGB);
+}
+
+//Creates gray sRGB color from gray value between 0 and 256. 
+//Set a to true if an RGBA output is desired.
+function gray(gVal, a=false) {
+    return a ? RGBA.color(gVal, gVal, gVal) : RGBA.color(gVal, gVal, gVal);
+}
+//Not a proper luma conversion for sRGB, 
+//relies on primaries and white point in NTSC color spaces like YIQ an YUV
+// function lumaCCIR601(rPrime, gPrime, bPrime) {
+//     let YPrime = 0.299 * rPrime + 0.587 * gPrime + 0.114 * bPrime;
+//     return YPrime;
+// }
+
+//Again not a proper luma function for sRGB, output should be luma values between 16 and 235
+//This function produces values from 0 to 255 which must be clamped.
+// function lumaBT709(rPrime, gPrime, bPrime) {
+//     let luma = 0.2126 * rPrime + 0.7152 * gPrime + 0.0722 * bPrime;
+//     return luma;
+// }
+
+module.exports = {
+    decodeGammaUI,
+    decodeGamma8Bit,
+    encodeGammaUI,
+    encodeGamma8Bit,
+    linearize8Bit,
+    'primaryChroma' : primaryChromaticityCoordinates.matrix,
+    'whitepointChroma' : whitepointChroma.matrix,
+    relativeLuminence,
+    sRGBtoXYZ,
+    XYZtosRGB,
+    gray
+}
+
+},{"../utility/linearalg_util.js":13,"./rgb.js":2}],4:[function(require,module,exports){
+const { zeros, initArray } = require("../utility/array_util.js");
+const { roundTo } = require('../utility/num_util.js');
 
 const impulse = {
     "delta" : (n=16, shift=0, scale=1) => { 
@@ -237,1419 +449,12 @@ module.exports = {
     impulse,
     psf
 }
-},{"./utility/array_util.js":13,"./utility/num_util.js":14}],3:[function(require,module,exports){
-//Calculates and returns the magnitude (spatial length) of a vector.
-const mag = vector => Math.sqrt(vector.reduce((acc, curr) => acc + (curr * curr), 0));
-//A and B are both N length vectors. Returns the angle in Radians between them.
-const angle = (A, B) => Math.acos(dot(A, B) / (mag(A) * mag(B)));
-//A and B are both vectors of length 3. Returns vector C of length 3 that is orthogonal to A and B.
-const cross = (A, B) => [
-    (A[1] * B[2]) - (A[2] * B[1]),
-    (A[2] * B[0]) - (A[0] * B[2]),
-    (A[0] * B[1]) - (A[1] * B[0])];
-//Calculates and returns the inverse of a square matrix. If matrix is not valid or not square, returns false.
-function invert(square) {
-    let sDim = dim(square);
-    if (!(sDim && sDim.rows === sDim.cols)) {
-        throw new err("Given Matrix must be square.")
-    } 
-    
-    let I = [];
-    let C = [];
-    for(let i = 0; i < sDim.rows; i++) {
-        I.push([]);
-        C.push([]);
-        for (let m = 0; m < sDim.rows; m++) {
-            I[i][m] = i === m ? 1 : 0;
-            C[i][m] = square[i][m];
-        }
-    }
-
-    let diag;
-    for (let r = 0; r < sDim.rows; r++) {
-        diag = C[r][r];
-        if (diag === 0) {
-            for (let s = r + 1; s < sDim.rows; s++) {
-                if (C[s][r] !== 0) {
-                    let temp = C[r];
-                    C[r] = C[s];
-                    C[s] = temp;
-                    temp = I[r];
-                    I[r] = I[s];
-                    I[s] = temp;
-                }
-            }
-            diag = C[r][r];
-            if (diag === 0) {
-                return false;
-            }
-        }
-
-        for (let i = 0; i < sDim.rows; i++) {
-            C[r][i] = C[r][i] / diag;
-            I[r][i] = I[r][i] / diag;
-        }
-        for (let g = 0; g < sDim.rows; g++) {
-            if (g === r) {
-                continue;
-            }
-
-            let h = C[g][r];
-
-            for (let j = 0; j < sDim.rows; j++) {
-                C[g][j] -= h * C[r][j];
-                I[g][j] -= h * I[r][j];
-            }
-        }
-    }
-
-    return I;
-}
-
-//Returns the rows and columns of a Matrix represented as a nested array.
-//If matrix is not well-formed, returns null.
-function dim(matrix) {
-    if (Array.isArray(matrix) && matrix.length > 0) {
-        let rows = matrix.length;
-        if (matrix[0] === undefined || matrix[0] === null) {
-            return null;
-        } else if (!Array.isArray(matrix[0])) {
-            return { "rows": rows, "cols" : 1 }
-        }
-        let cols = matrix[0].length;
-        for (let r = 0; r < matrix.length; r++) {
-            if (Array.isArray(matrix[r])) {
-                if (matrix[r].length !== cols) {
-                    return null;
-                }
-            } else {
-                return null;
-            }
-        }
-        return {rows, cols}
-    }
-    return null;
-}
-
-
-function determinant(matrix) {
-    let dimM = dim(matrix);
-    if (dimM && dimM.rows !== dimM.cols) {
-        return null;
-    }
-    let det = null;
-
-    if (dimM.rows === 2) {
-        det = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0];
-    } else {
-        det = 0;
-        let even = false;
-        for(let c = 0; c < dimM.rows; c++) {
-            let scalar = matrix[0][c];
-            let subMatrix = [];
-            for (let r = 1; r < dimM.rows; r++) {
-                let smRow = [];
-                for (let col = 0; col < dimM.rows; col++) {
-                    if (col !== c) {
-                        smRow.push(matrix[r][col]);
-                    }
-                }
-                subMatrix.push(smRow);
-            }
-            
-            let subDet = determinant(subMatrix);
-            if (even) {
-                det -= scalar * subDet;
-            } else {
-                det += scalar * subDet;
-            }
-            even = !even;
-        }
-    }
-    return det;
-}
-
-//Given two vectors of length n, returns the dot-product of their entries
-function dot(A, B) {
-    if (!(A && B) || A.length === 0 || A.length !== B.length) {
-        throw new Error("Vectors A and B must be Arrays of the same length.");
-    }
-    let product = 0;
-    for (let i = 0; i < A.length; i++) {
-        product += A[i] * B[i];
-    }
-    return product;
-}
-
-function multiply(A, B) {
-    let dimA = dim(A);
-    let dimB = dim(B);
-    if (!(dimA && dimB)) {
-        console.log(dimA);
-        console.log(dimB);
-        throw new Error("A and B must be valid matrices.");
-
-    }
-    if (dimA.cols !== dimB.rows) {
-        throw new Error(
-            "The column count of Matrix A (" + dimA.cols +
-            ") and the row count of B (" + dimB.rows + ") must match."
-        );
-    }
-
-    let C = []; 
-    //Set up C to be a dimA.rows x dimB.cols matrix
-    //only perform if product is not a vector
-    if (dimB.cols > 1) {
-        for (let s = 0; s < dimA.rows; s++) {
-            C.push([]);
-        }
-    }
-
-    for (let i = 0; i < dimA.rows; i++) {
-        for (let j = 0; j < dimB.cols; j++) {
-            let sum = 0;
-            for (let k = 0; k < dimA.cols; k++) {
-                let av, bv;
-                av = dimA.cols === 1 ? A[i] : A[i][k];
-                bv = dimB.cols === 1 ? B[k] : B[k][j];
-                
-                sum = sum + av * bv;
-            }
-            if (dimB.cols > 1) {
-                C[i][j] = sum;
-            } else {
-                C[i] = sum;
-            }          
-        }
-    }
-    return C;
-}
-
-module.exports = {
-    dim,
-    invert,
-    multiply,
-    dot,
-    mag,
-    angle,
-    cross
-}
-},{}],4:[function(require,module,exports){
-const { zeros } = require('./utility/array_util.js');
-
-const DiscreteDistribution = (function() {
-    function DiscreteDistribution(data, intervalCount, min, max) {
-        this.dist = data;
-        this.intervalCount = intervalCount;
-        this.intervalSize = (max - min + 1) / intervalCount;
-        this.min = min;
-        this.max = max;
-    }
-    const $DD = DiscreteDistribution.prototype;
-
-    $DD.intervalIndex = function(value) {
-        let index = Math.floor((value - this.min) / this.intervalSize);
-        if (this.dist[index] === undefined) return null;
-        return index;
-    }
-
-    // $DD.midpointArea = function(intervalIndex) {
-    //     return this.dist[intervalIndex] * this.intervalSize;
-    // }
-    // $DD.trapezoidArea = function(intervalIndex) {
-    //     let sideA = intervalIndex === 0 ? 0 : ((this.dist[intervalIndex] - this.dist[intervalIndex - 1]) / 2) + this.dist[intervalIndex];
-    //     let sideB = intervalIndex === this.dist.length - 1;
-    // }
-    return DiscreteDistribution;
-})();
-
-const ProbabilityDist = (function() {
-    function ProbabilityDist(probabilities, min, max) {
-        DiscreteDistribution.call(this, probabilities, probabilities.length, min, max);
-    }
-    ProbabilityDist.prototype = Object.create(DiscreteDistribution.prototype);
-    ProbabilityDist.prototype.constructor = ProbabilityDist;
-    const $PD = ProbabilityDist.prototype;
-
-    $PD.mean = function() {
-        return this.dist.reduce((acc, prob, i) => acc + ((i + 1) * this.intervalSize + this.min) * prob, 0);
-    }
-
-    $PD.pdf = function() {
-        return this.dist.map(prob => parseFloat(prob / this.intervalSize).toPrecision(4));
-    }
-
-    $PD.cdf = function() {
-        let acc = 0;
-        return this.dist.map((acc => prob => parseFloat(acc += prob).toPrecision(4))(0));
-    }
-    return ProbabilityDist;
-})();
-
-const FrequencyDist = (function() {
-    function FrequencyDist(outcomes, intervalCount, min, max) {
-        this.totalOutcomes = 0;
-
-        DiscreteDistribution.call(this, zeros([intervalCount]), intervalCount, min, max);
-        this.populate(outcomes);
-    }
-    FrequencyDist.prototype = Object.create(DiscreteDistribution.prototype);
-    FrequencyDist.prototype.constructor = FrequencyDist;
-    const $FD = FrequencyDist.prototype;
-
-    $FD.populate = function(outcomes) {
-        for (let oc of outcomes) {
-            if (oc >= this.min && oc < this.max) {
-                this.totalOutcomes++;
-                this.dist[this.intervalIndex(oc)] += 1;
-            }
-        }
-    }
-    $FD.mean = function() {
-        return this.dist.reduce((acc, freq) => 
-            acc + (freq * ((i + 1) * this.intervalSize + this.min)),
-            0
-        ) / this.totalOutcomes;
-    }
-    //Returns the cumulative frequency districution as a list A, where each element j is the sum of the 
-    //frequencies of the distribution from 0 through j - 1.
-    $FD.cumulativeFrequency = function() {
-        return this.dist.map((acc => freq => acc += freq)(0));
-    }
-    //Calculates the probability of each outcome interval and returns the corresponding probability distribution object.
-    $FD.toProbabilityDist = function() {
-        let probData = this.dist.map(freq => freq / this.totalOutcomes);
-        return new ProbabilityDist(probData, this.min, this.max);
-    }
-
-    $FD.pdf = function() {
-        return this.dist.map(freq => parseFloat(freq / this.totalOutcomes / this.intervalSize).toPrecision(4));
-    }
-
-    $FD.cdf = function() {
-        return this.dist.map((acc => freq => parseFloat(acc + freq))(0));
-    }
-    //Given a numerical range, equalizes the probabilities of the distribution's outcomes across the new range. 
-    //Returns list of equalized value of each interval. 
-    $FD.equalize = function(toRange, withMin=0) {
-        let range = toRange - 1;
-        let cumHist = this.cumulativeFrequency();
-        let cumMin = 0;
-        for (let i = 0; i < cumHist.length; i++) {
-            if (cumHist[i] > 0) {
-                cumMin = cumHist[i];
-                break;
-            }
-        }
-        let cumTotal = this.totalOutcomes - cumMin;
-        let outcome = cumHist.map(cumFreq => withMin + Math.round((cumFreq - cumMin) / cumTotal * range));
-        for (let i = 0; i < outcome.length; i++) {
-            if (outcome[i] < withMin) {
-                outcome[i] = withMin;
-            } else {
-                break;
-            }
-        }
-        return outcome;
-    }
-    return FrequencyDist;
-})();
-
-module.exports = { 
-    DiscreteDistribution,
-    FrequencyDist,
-    ProbabilityDist,
-};
-},{"./utility/array_util.js":13}],5:[function(require,module,exports){
+},{"../utility/array_util.js":12,"../utility/num_util.js":14}],5:[function(require,module,exports){
 'use strict';
-const { RGB, RGBA } = require('./rgb.js');
-const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('./srgb.js');
-const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('./cie.js');
-const { bankRound, nextPowerOf2 } = require('./utility/num_util.js');
-const { zeros } = require('./utility/array_util.js');
-const { isPowerOfTwo } = require('./utility/type_util.js');
-const { RGBImage } = require('./rgbimage.js');
-const { convolveComplex } = require('./signal.js');
-const { FrequencyDist } = require('./histogram.js');
-const { Tensor } = require('./tensor.js');
-
-//Given an RGBA image, equalizes the lightness of the image between the minimum and maximum values
-function equalizeImgLight(realImage, min, max) {
-    let histogram = new FrequencyDist(realImage.toLightness(), 64, min, max);
-    let equalCDF = histogram.equalize(256);
-    let equalData = [];
-
-    realImage.forEachPixel((pixel) => {
-        let lab = XYZtoLAB(sRGBtoXYZ(pixel));
-        let l8bit = Math.floor(LAB.LVal(lab) / 100 * 255);
-
-        if (l8bit >= min && l8bit < max) {
-            let new8BitL = equalCDF[histogram.intervalIndex(l8bit)];
-            let equalsrgb = XYZtosRGB(
-                LABtoXYZ(
-                    LAB.color(new8BitL / 255 * 100, LAB.AVal(lab), LAB.BVal(lab)
-                ), undefined, true)
-            );
-            equalData.push(...equalsrgb);
-        } else {
-            equalData.push(...pixel);
-        }
-        equalData.push(255);
-    });
-
-    return new RGBImage(equalData, realImage.width, true);
-}
-
-//Use when performing a transfrom on multi-channel flat image in place.
-//Translates the abstract index n in the input signal to its actual index in the image. 
-function makeFFTIndex(si, dimIndex, isCol, chan) {
-    let tensorIndex = [0,0,chan];
-    tensorIndex[+isCol] = dimIndex;
-    tensorIndex[+!isCol] = si;
-    return tensorIndex;
-}
-
-function radix2FFTImage(complexImage, dimIndex, isCol=false, chans=3) {
-    let ReX = complexImage.real,
-        ImX = complexImage.imag,
-        signalLength = isCol ? complexImage.height() : complexImage.width(),
-        power = bankRound(Math.log2(signalLength)),
-        j = signalLength / 2,
-        tempR,
-        tempI,
-        c;
-
-    //Sort in Reverse Bit order
-    for (let i = 1; i < signalLength; i++) {
-        if (i < j) {
-            let ti = ReX._toDataIndex(makeFFTIndex(i, dimIndex, isCol, 0));
-            let tj = ReX._toDataIndex(makeFFTIndex(j, dimIndex, isCol, 0));
-            for (c = 0; c < chans; c++) {
-                tempR = ReX.getAtDI(tj);
-                tempI = ImX.getAtDI(tj);
-                ReX.setAtDI(tj, ReX.getAtDI(ti));
-                ImX.setAtDI(tj, ImX.getAtDI(ti));
-                ReX.setAtDI(ti, tempR);
-                ImX.setAtDI(ti, tempI);
-                ti = ReX._incrementDataIndex(ti, 1, 2);
-                tj = ReX._incrementDataIndex(tj, 1, 2);
-            }
-        }
-        let k = signalLength / 2;
-        while (k <= j) {
-            j = j - k;
-            k = k / 2;
-        }
-        j = j + k;
-    }
-
-    //Loop for each stage
-    for (let stage = 1; stage <= power; stage++) {  
-        let spectraSize = Math.pow(2, stage);      
-        let halfSpectra = spectraSize / 2;
-        let ur = 1;
-        let ui = 0;
-        //calculate sine and cosine values
-        let sr = Math.cos(Math.PI / halfSpectra);
-        let si = Math.sin(Math.PI / halfSpectra);
-
-        //Loop for each Sub-DTF
-        for (j = 1; j <= halfSpectra; j++) {
-            //Loop for each Butterfly
-            for (let i = j - 1; i < signalLength; i += spectraSize) {
-                let ip = ReX._toDataIndex(makeFFTIndex(i + halfSpectra, dimIndex, isCol, 0));
-                let ti = ReX._toDataIndex(makeFFTIndex(i, dimIndex, isCol, 0));
-                //Butterfly calculation for each channel's signal
-                for (c = 0; c < chans; c++) {
-                    tempR = ReX.getAtDI(ip) * ur - ImX.getAtDI(ip) * ui;
-                    tempI = ReX.getAtDI(ip) * ui + ImX.getAtDI(ip) * ur;
-                    ReX.setAtDI(ip, ReX.getAtDI(ti) - tempR);
-                    ImX.setAtDI(ip, ImX.getAtDI(ti) - tempI);
-                    ReX.setAtDI(ti, ReX.getAtDI(ti) + tempR);
-                    ImX.setAtDI(ti, ImX.getAtDI(ti) + tempI);
-                    ip = ReX._incrementDataIndex(ip, 1, 2);
-                    ti = ReX._incrementDataIndex(ti, 1, 2);
-                }
-            }
-            tempR = ur;
-            ur = tempR * sr - ui * si;
-            ui = tempR * si + ui * sr;
-        }
-    }
-    return complexImage;
-}
-
-function chirpZTransformImage(complexImage, dimIndex, isCol=false, chans=3) {
-    let ReX = complexImage.real,
-        ImX = complexImage.imag;
-        signalLength = isCol ? complexImage.height() : complexImage.width(),
-        powerOf2 = 1;  
-    while (powerOf2 < signalLength * 2 + 1) powerOf2 *= 2;
-    //Perform the following Z-Transform for all channels
-    for (let c of chans) {
-        let tcos = [];
-        let tsin = [];
-        let ReA = zeros([powerOf2], true);
-        let ImA = zeros([powerOf2], true);
-        let ReB = zeros([powerOf2], true);
-        let ImB = zeros([powerOf2], true);
-
-        for (let si = 0; si < signalLength; si++) {
-            let j = si * si % (signalLength * 2),
-                ti = ReX._toDataIndex(makeFFTIndex(si, dimIndex, isCol, c));
-            tcos[si] = Math.cos(Math.PI * j / signalLength);
-            tsin[si] = Math.sin(Math.PI * j / signalLength);
-            ReA[si] = ReX.getAtDI(ti) * tcos[si] + ImX.getAtDI(ti) * tsin[si];
-            ImA[si] = ImX.getAtDI(ti) * tcos[si] - ReX.getAtDI(ti) * tsin[si];
-        }
-        //Pad with zeros so that length is radix-2 number M
-        for (let sigPadIndex = signalLength; sigPadIndex < powerOf2; sigPadIndex++) {
-            ReA[sigPadIndex] = 0;
-            ImA[sigPadIndex] = 0;
-        }
-
-        ReB[0] = tcos[0];
-        ImB[0] = tsin[0];
-        for (let si = 1; si < signalLength; si++) {
-            ReB[si] = tcos[si];
-            ImB[si] = tsin[si];
-            ReB[powerOf2 - si] = tcos[si];
-            ImB[powerOf2 - si] = tsin[si];
-        }
-
-        convolveComplex(ReA, ImA, ReB, ImB);
-        for (let si = 0; si < signalLength; si++) {
-            let ti = ReX._toDataIndex(makeFFTIndex(si, dimIndex, isCol, c));
-            ReX.setAtDI(ti, ReA[i] * tcos[i] + ImA[i] * tsin[i]);
-            ImX.setAtDI(ti, ImA[i] * tcos[i] - ReA[i] * tsin[i]);
-        }
-    }
-    return complexImage;
-}
-
-function FFT1DImage(complexImage, dimIndex, isCol=false, chans) {
-    let signalLength = isCol ? complexImage.height() : complexImage.width();
-    if (signalLength === 0) return;
-    //If Signal length is a power of two perform Radix-2 FFT
-    if (isPowerOfTwo(signalLength)) {
-        radix2FFTImage(complexImage, dimIndex, isCol, chans); 
-    } else {
-        //If Signal length is arbitrary or prime, perform chirp-z transfrom
-        chirpZTransformImage(complexImage, dimIndex, isCol, chans);
-    }
-    return complexImage;
-}
-
-function FFT2DFromComplexImage(complexImage, chans) {
-    //Take FFT of rows and store in real and imaginary images.
-    for (let row = 0; row < complexImage.height(); row++) {
-        FFT1DImage(complexImage, row, false, chans);
-    }
-    //Take FFT of each column
-    for (let col = 0; col < complexImage.width(); col++) {
-        FFT1DImage(complexImage, col, true, chans);
-    }
-    return complexImage;
-}
-
-/** Calculates Fourier Transform of a 2D image represented as one flat multi-channel array.
- * @param   {Object}  rgbImage Instance of the RGBImage class.
- * @param   {Int}     chans   the number of color channels to perform the transform on.
- * @param   {Boolean} inPlace If true will alter the original image object.
- * @returns {Object} ComplexSignal     A complex representation of the image in the frequency domain.
- * @returns {Array}  ComplexSignal.real The real component of the signal in the freq domain.
- * @returns {Array}  ComplexSignal.imag The imaginary component of the signal in the freq domain.
-**/
-function FFT2DFromRealImage(rgbImage, chans, inPlace=true) {
-    let height = rgbImage.shape[0];
-    let width = rgbImage.shape[1];
-
-    let ReX = inPlace ? 
-        rgbImage : 
-        new RGBImage(rgbimage.data.slice(0), width, height);
-    let ImX = new Tensor(rgbImage.shape, zeros(rgbImage.shape, true));
-    let complexImage = {
-        real : ReX,
-        imag : ImX,
-        height : () => {
-            ReX.shape[0];
-        },
-        width : () => {
-            ReX.shape[1];
-        }
-    }
-    return FFT2DFromComplexImage(complexImage, chans);
-}
-
-/** Inverse Fourier Transform of a complex 2D image in the frequency domain epresented as two flat multi-channel array components
- * @param   {Object}  complexImage  instantiation of complex image class with real and imaginary components in the frequency domain.
- * @param   {Int}     chans   the number of color channels to perform the inverse FFT on.
- * @returns {Object} ComplexSignal     References to the component arrays that have been altered in place.
- * @returns {Array}  ComplexSignal.real The real component of the signal in the time domain.
- * @returns {Array}  ComplexSignal.imag The imaginary component of the signal in the time domain.
-**/
-function inverseFFT2DImage(complexImage, chans) {
-    let normal = complexImage.height() * complexImage.width();
-
-    complexImage.imag.forEachVal([[],[],[0,[],chans]], (amp, dataIndex) => {
-        complexImage.imag.setAtDI(dataIndex, amp * -1);
-    });
-
-    FFT2DFromComplexImage(complexImage, chans);
-
-    //Normalize each value by dividing by pixelWidth * pixelHeight
-    complexImage.real.forEachVal([[],[],[0,[],chans]], (value, dataIndex) => {
-        complexImage.real.setAtDI(dataIndex, value / normal);
-    });
-    complexImage.imag.forEachVal([[],[],[0,[],chans]], (value, dataIndex) => {
-        complexImage.imag.setAtDI(dataIndex, -1 * value / normal);
-    });
-
-    return { complexImage };
-}
-
-function multiplyFreqImage(complexX, copmlexH, chans, inPlace=false) {
-    if (!max) max = ReX.length;
-    let ReY = inPlace ? ReX : [],
-        ImY = inPlace ? ImX : [];
-
-    if (inPlace) {
-        let temp;
-        for (let i = min; i < max; i++) {
-            temp = ReX[i] * ReH[i] - ImX[i] * ImH[i]; 
-            ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
-            ReY[i] = temp;
-        }
-    } else {
-        for (let i = min; i < max; i++) {
-            ReY[i] = ReX[i] * ReH[i] - ImX[i] * ImH[i];
-            ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
-        }
-    }
-    return { "ReX" : ReY, "ImX" : ImY }
-}
-
-function FFTConvolution(img, psf) {
-    let FFTHeight = nextPowerOf2(img.height() * 2 - 1);
-    let FFTWidth = nextPowerOf2(img.width() * 2 - 1);
-
-    let imgPaddingAfter = [
-        Math.floor((FFTHeight - img.height()) / 2),
-        Math.floor((FFTWidth - img.width()) / 2)
-    ];
-    let imgPaddingBefore = [
-        Math.ceil((FFTHeight - img.height()) / 2),
-        Math.ceil((FFTWIdht - img.width()) / 2)
-    ];
-    let psfPaddingAfter = [
-        Math.floor((FFTHeight - psf.shape[0]) / 2),
-        Math.floor((FFTWidth - psf.shape[1]) / 2)
-    ];
-    let psfPaddingBefore = [
-        Math.ceil((FFTHeight - psf.shape[0]) / 2),
-        Math.ceil((FFTWidth - psf.shape[1]) / 2)
-    ];
-    img.pad(imgPaddingBefore, imgPaddingAfter, true, 'constant', 0);
-    psf.pad(psfPaddingBefore, psfPaddingAfter, true, 'constant', 0);
-
-    let complexFreqImg = FFT2DFromRealImage(img, 3, true);
-    let complexFreqPSF = FFT2DFromRealImage(psf, 1, true);
-
-    let convolvedFreqImg = multiplyFreqImage(complexFreqImg, complexFreqPSF, 3, inPlace);
-    return  depadRealImage( inverseFFT2DImage(convolvedFreqImg, 3).real , width, 3, min);
-}
-
-// function convolveRealImage(img, psf, edge="mirror") {
-//     let output = [];
-//         finalHeight = img.height() + psf.rows() - 1,
-//         finalWidth = img.width() + psf.cols() - 1,
-//         leftRadius = Math.ceil(psf.cols() / 2) - 1, //5 = 2 4 = 1
-//         rightRadius = psf.cols() - leftRadius - 1, //5 = 2; 4 = 2;
-//         topRadius = Math.ceil(psf.rows() / 2) - 1,
-//         bottomRadius = psf.rows() - topRadius - 1;
-//         // cntrRI= leftRadius,
-//         // cntrCI = rightRadius,
-//         let currIndex = 0;
-//         let rightSum = 0;
-//         let topSum = 0;
-//         let sum = 0;
-//         let subCols = 0;
-//         let subRows = 0;
-//         let totalSub = 0;
-//     for (let row = 0; row < imgHeight; row++) {
-//         for (let col = 0; col < imgWidth; col++) {
-            
-
-//             //calculate submerged columns and rows;
-//             if (col < leftRadius) subCols = leftRadius - col;
-//             else if (imgWidth - col <= rightRadius) subCols = rightRadius - (imgWidth - col - 1);
-//             if (row < topRadius) subRows = topRadius - row;
-//             else if (imgHeight - row <= bottomRadius) subRows = bottomRadius - (imgHeight - row - 1);
-            
-//             if (!subRows || !subCols) {
-//                 switch(edge) {
-//                     case "mirror" : 
-//                         wrapRInd = imgHeight - r - 1;
-//                         break;
-//                     case "pad" : 
-//                         val = 0;
-//                         break;
-//                     case "correct" :
-//                         //divide by immersed pixels;
-//                         break;
-//                 }
-//             } else {
-//                 for (let pr = -topRadius; pr <= bottomRadius; pr++) {
-//                     for (let pc = -leftRadius; pc <= rightRadius; pc++) {
-//                         //sum += img[((r * imgWidth) + c) * chans] * 
-                        
-//                     }
-    
-//                 }
-//             }
-//         }
-//     }
-
-//     for (let r = -topRadius; r < imgHeight - topRadius; r++) {
-//         for (let c = -leftRadius; c < imgWidth - leftRadius; c++) {
-//             let sum = 0,
-//                 subC = 0,
-//                 subR = 0,
-//                 totalSub;
-
-//             //calculate submerged columns and rows;
-//             if (c < 0) subC = 0 - c;
-//             else if (c + psfWidth - 1 >= imgWidth) subC = psfWidth - imgWidth + c;
-//             if (r < 0) subR = 0 - r;
-//             else if (r + psfHeight - 1 >= imgHeight) subR = psfHeight - imgHeight + r;
-            
-//             if (!subR || !subC) {
-//                 switch(edge) {
-//                     case "mirror" : 
-//                         wrapRInd = imgHeight - r - 1;
-//                         break;
-//                     case "pad" : 
-//                         val = 0;
-//                         break;
-//                     case "correct" :
-//                         //divide by immersed pixels;
-//                         break;
-//                 }
-//             } else {
-//                 for (let pr = 0; pr < psfHeight; pr++) {
-//                     for (let pc = 0; pc < psfWidth; pc++) {
-//                         //sum += psf[]
-                        
-//                     }
-//                 }
-//             }
-//             //output[row col] = 
-//         }
-//     }
-// }
-module.exports = {
-    equalizeImgLight,
-    FFT2DFromRealImage,
-    inverseFFT2DImage,
-    FFT1DImage,
-}
-},{"./cie.js":1,"./histogram.js":4,"./rgb.js":8,"./rgbimage.js":9,"./signal.js":10,"./srgb.js":11,"./tensor.js":12,"./utility/array_util.js":13,"./utility/num_util.js":14,"./utility/type_util.js":16}],6:[function(require,module,exports){
-const { RGBImage } = require('./rgbimage.js');
-const { equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./imageprocessing.js');
-const { RGB, RGBA } = require('./rgb.js');
-const { relativeLuminence, linearize8Bit } = require('./srgb.js');
-const { lightness } = require('./cie.js');
-const { gaussGray } = require('./randomgeneration.js');
-const { zeros } = require('./utility/array_util.js');
-const { round } = require('./utility/num_util.js');
-const { randIntArray } = require('./randomgeneration.js');
-const { extendRealFreqDomain, FFT, inverseFFT } = require('./signal.js');
-const { impulse, psf } = require('./filter.js');
-const { Tensor } = require('./tensor.js');
-// function checkFFT() {
-//     let r = randIntArray(0, 10, 32);
-//     let i = zeros(32);
-//     console.log(r);
-//     console.log(i);
-//     FFT(r, i);
-//     console.log(r);
-//     console.log(i);
-//     inverseFFT(r, i);
-//     console.log(r);
-//     console.log(i);
-// }
-
-let img = new Image();
-let animate = false;
-let odd = true;
-const lValRange = 255;
-const gradientSize = 25;
-const gradOffset = 15;
-const timestep = 30;
-img.src = 'img/flowers.jpg';
-
-img.onload = function() {
-    console.log("hi");
-
-    let data = [0,1,2,3,4,5,6,7,8];
-    console.log(data);
-    let tt = new Tensor([3, 3], data);
-    console.log(tt);
-    console.log(tt.pad([4, 4], [4, 4], true, "constant"));
-    console.log(tt.toNestedArray());
-    // console.log("settring [], 0,2 " + tt.set([[], [0, 2]], [9,1,9,1,9,1]));
-    // tt.pad([1,1], [1,1], [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
-    // console.log("gettring [], 0,2 " + tt.get([[], [0, 2]], [9,1,9,1,9,1]));
-    // console.log(tt.data);
-    // console.log(tt.toNestedArray());
-    // console.log(psf.gauss(5, 5, 1));
-    // let canvas = document.getElementById("manip");
-    // let context = canvas.getContext('2d');
-    // let whratio = this.height / this.width;
-    // let cwidth = 500;
-    // let cheight = whratio * cwidth;
-    // canvas.width = cwidth;
-    // canvas.height = cheight;
-    // context.drawImage(this, 0, 0, cwidth, cheight);
-    // let contextData = context.getImageData(0,0, cwidth, cheight);
-    // let rawImgData = contextData.data;
-    // console.log("image pix = " + rawImgData.length);
-    // console.log(rawImgData)
-    // let jkImage = new RGBImage(rawImgData.slice(0,400), 10, true);
-    // console.log(jkImage.toPixels(true));
-    // console.log(jkImage.toNestedArray());
-    // let chanTotal = 0;
-    // jkImage.size;
-    // console.log(`Getting lightness values for ${jkImage.width * jkImage.height} pixels`)
-    // console.log(jkImage.toLightness());
-    // equalizeImgLight(jkImage, 0, 256);
-    // // console.log(read.getRedChannel());
-    // // console.log(read.widthRes);
-    // // console.log(read.heightRes);
-    // // console.log(read.widthRes * read.heightRes * 4);
-    // let LI = jkImage.lightnessDataIndices();
-
-    // convertImagetoASCII(rawImgData, cwidth, (textImage) => {
-    //     document.getElementById('result').innerHTML = textImage;
-    // });
-
-    // convertImagetoGrayscale(rawImgData, cwidth, (gsImageData) => {
-    //     contextData.data.set(gsImageData);
-    //     context.putImageData(contextData, 0, 0); 
-    // });
-    // getRandomColorsOfLight(90000, 77, (randImageData) => {
-    //     contextData.data.set(randImageData);
-    //     context.putImageData(randImageData, 0, 0);
-    // });
-
-    // convertImgToRandBrightGradient(rawImgData, cwidth, (rImageData) => {
-    //     console.log(rImageData);
-    //     contextData.data.set(rImageData);
-    //     context.putImageData(contextData, 0, 0); 
-    // })
-    let pw = 3;
-    let grays = gaussGray(pw * pw, 32);
-    
-    console.log(grays.length)
-    let hist = [];
-    for (let m = 0; m < 256; m++) {
-        hist[m] = 0;
-    }
-    for (let g = 0; g < grays.length; g++) {
-        hist[grays[g]] += 1;
-    }
-
-    data = [];
-    for (let i = 0; i < hist.length; i++) {
-        data.push({name: i, value: hist[i] / grays.length})
-    }
-    displayHistogram('#old', data, "steelblue", 500, 1200)
-    let grayImg = [];
-    for (let g = 0; g < grays.length; g++) {
-        grayImg.push(grays[g], grays[g], grays[g], 255);
-    }
-    console.log(padRealImage(grays, pw, 4, 6, 6));
-    console.log(grayImg);
-    console.log("Fourier");
-    let { ReX, ImX } = FFT2DFromRealImage(grayImg, pw, 4, true);
-    console.log(ReX);
-    inverseFFT2DImage(ReX, ImX, 4, pw);
-    console.log(ReX)
-    contextData.data.set(new Uint8ClampedArray(grayImg));
-    context.putImageData(contextData, 0, 0); 
-
-    getLightnessValuesofImg(rawImgData, cwidth, (light) => {
-        let lightIdxs = {};
-        let original = {};
-        for (let m = 1; m < light.length; m++) {
-            if (!lightIdxs[light[m]]) {
-                lightIdxs[light[m]] = [];
-                original[light[m]] = [];
-            }
-            lightIdxs[light[m]].push(m * 4);
-            original[light[m]].push([
-                m * 4,
-                rawImgData[m * 4],
-                rawImgData[m * 4 + 1],
-                rawImgData[m * 4 + 2],
-                rawImgData[m * 4 + 3]
-            ]);
-        }
-        // let eqimg = equalizeLightness(rawImgData);
-        // console.log(eqimg)
-        // contextData.data.set(eqimg);
-        // context.putImageData(contextData, 0, 0); 
- 
-        console.log("light Indexes")
-        console.log(lightIdxs)
-        document.getElementById('stop').addEventListener('click', function() {
-            if (animate) {
-                animate = false;
-                console.log("stop");
-                setTimeout(function() {
-                    console.log("stopping")
-                    reverseCanvas(lightIdxs, context, cwidth, cheight);
-                },
-                gradientSize * timestep * 3);
-            }
-        });
-        document.getElementById('start').addEventListener('click', function() {
-            if (!animate) {
-                //make so max does not overflow
-                drawTheThing(0, gradOffset ? gradOffset : gradientSize, lightIdxs, cwidth, cheight, context);
-                animate = true;
-            }     
-        });
-    });
-    getLightnessHistogram(rawImgData, (hst) => {
-        displayHistogram('svg', hst, "steelblue", 500, 1200)
-    })  
-}
-
-
-function getLightnessHistogram(rawImgData, next) {
-    let binCount = 101,
-    max = 100,
-    min = 0,
-    range = max - min,
-    binSize = range / binCount;
-
-    let hist = histogram(rawImgData, (rgbColor) => {
-        let Y = relativeLuminence(linearize8Bit(rgbColor));
-        return Math.round((lightness(Y) / 100) * (max));
-    },
-    binCount,
-    min,
-    max,
-    true
-    );
-    
-    next(hist.map((p, i) => {
-        return {name: (i * binSize) + min, value : p}
-    }));
-
-    // let http = new XMLHttpRequest();
-    // let url = "/lhist";
-    // http.open('POST', url, true);
-    // http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-    // http.onreadystatechange = function() {
-    //     if (http.readyState == 4 && http.status == 200) {
-    //         next(JSON.parse(http.responseText));
-    //     }
-    // }
-    // http.send('imageWidth=' + imageWidth + '&' + 'imageData=' + rawImgData);
-}
-
-function equalizeLightness(rawImgData) {
-    return equalizeImgLight(rawImgData, 0, 255);
-}
-function reverseCanvas(original, context, cwidth, cheight) {
-    let imageData = context.getImageData(0,0, cwidth, cheight);
-    for (let m = 0; m < lValRange + 1; m++) {
-        setTimeout(function() {
-            let L = lValRange - m;
-            if (original[L]) {
-                original[L].forEach( p => {
-                    for (let c = 1; c < 5; c++) {
-                        imageData.data[p[0] + c - 1] = p[c];
-                    }
-                });
-            }
-            context.putImageData(imageData, 0 , 0);
-        },
-       m * timestep);
-    }
-    console.log(imageData.data);
-}
-function updateLPixels(start, y, lightIdxs, grad, imageData, context, flip) {
-    let L;
-    if (flip) {
-        L = y + start;
-    } else {
-        L = lValRange - (y + start);
-    }
-    if (lightIdxs[L]) {
-        lightIdxs[L].forEach( p => {
-            for (let c = 0; c < 4; c++) {
-                imageData.data[p + c] = grad[y * 4 + c];
-            }
-        });
-    }
-    context.putImageData(imageData, 0, 0);
-}
-
-function drawTheThing(min, max, lightIdxs, cwidth, cheight, context) {
-    getRandomLightGradient(min, max, function(grad) {
-        let imageData = context.getImageData(0,0, cwidth, cheight);
-        for (let y = 0; y < max - min; y++) {
-            setTimeout(function() {
-                updateLPixels(min, y, lightIdxs, grad, imageData, context, odd);
-            }, timestep * y)
-        }
-    
-        if (animate) {
-            setTimeout(function() {
-                let nxtMin = max;
-                let nxtMax = nxtMin + gradientSize;
-                if (nxtMin >= lValRange) {
-                    nxtMin = 0;
-                    nxtMax = gradOffset === 0 ? gradientSize : nxtMin + gradOffset;
-                    odd = !odd;
-                }
-                if (nxtMax > lValRange) {
-                    nxtMax = lValRange;
-                }
-                drawTheThing(nxtMin, nxtMax, lightIdxs, cwidth, cheight, context)
-            },
-                timestep * (max - min)
-            );    
-        }
-    });    
-}
-function filterImage(route, rawImgData, imageWidth, next) {
-    let http = new XMLHttpRequest();
-    let url = route;
-    http.open('POST', url, true);
-    http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-    http.onreadystatechange = function() {
-        if (http.readyState == 4 && http.status == 200) {
-            let unclampedData = http.responseText.slice(1, http.responseText.length - 1).split(",");
-            let filtrdImgData = new Uint8ClampedArray(unclampedData);
-            next(filtrdImgData);
-        }
-    }
-    http.send('imageWidth=' + imageWidth + '&' + 'imageData=' + rawImgData);
-}
-function convertImagetoASCII(rawImgData, imageWidth, next) {
-    let http = new XMLHttpRequest();
-    let url = "/ascii";
-    http.open('POST', url, true);
-    http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-    http.onreadystatechange = function() {
-        if (http.readyState == 4 && http.status == 200) {
-            next(http.responseText);
-        }
-    }
-    http.send('imageWidth=' + imageWidth + '&' + 'imageData=' + rawImgData);
-}
-function convertImagetoGrayscale(rawImgData, imageWidth, next) {
-    filterImage('/gray', rawImgData, imageWidth, next);
-}
-function convertImageToRand(rawImgData, imageWidth, next) {
-    filterImage('/randimg', rawImgData, imageWidth, next);
-}
-function convertImageToRandomColorLayers(rawImgData, imageWidth, next) {
-    filterImage('/randlayer', rawImgData, imageWidth, next);
-}
-function convertImgToRandBrightGradient(rawImgData, imageWidth, next) {
-    filterImage('/randgradient', rawImgData, imageWidth, next);
-}
-function getLightnessValuesofImg(rawImgData, imageWidth, next) {
-    filterImage('/light', rawImgData, imageWidth, next);
-}
-
-function getRandomLightGradient(Lstart, Lend, next) {
-    let http = new XMLHttpRequest();
-    let url = "/randlgrad";
-    http.open('POST', url, true);
-    http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-    http.onreadystatechange = function() {
-        if (http.readyState == 4 && http.status == 200) {
-            let unclampedData = http.responseText.slice(1, http.responseText.length - 1).split(",");
-            let grad = new Uint8ClampedArray(unclampedData);
-            next(grad);
-        }
-    }
-    http.send('start=' + Lstart + "&end=" + Lend);
-}
-function getRandomColorsOfLight(x, L, next) {
-    let http = new XMLHttpRequest();
-    let url = "/rand";
-    http.open('POST', url, true);
-    http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-    http.onreadystatechange = function() {
-        if (http.readyState == 4 && http.status == 200) {
-            let unclampedData = http.responseText.slice(1, http.responseText.length - 1).split(",");
-            let randImgData = new ImageData( new Uint8ClampedArray(unclampedData), 300);
-            next(randImgData);
-        }
-    }
-    http.send('pixels=' + x + '&' + 'light=' + L);
-}
-
-function displayHistogram(selector, data, color, height, width) {
-    let svg = d3.select(selector);
-    let margin = ({top: 30, right: 0, bottom: 30, left: 40});
-    let yAxis = g => g
-    .attr("transform", `translate(${margin.left},0)`)
-    .call(d3.axisLeft(y).ticks(null, data.format))
-    .call(g => g.select(".domain").remove())
-    .call(g => g.append("text")
-        .attr("x", -margin.left)
-        .attr("y", 10)
-        .attr("fill", "currentColor")
-        .attr("text-anchor", "start")
-        .text(data.y))
-
-    let xAxis = g => g
-    .attr("transform", `translate(0,${height - margin.bottom})`)
-    .call(d3.axisBottom(x).tickFormat(i => data[i].name).tickSizeOuter(0))
-
-    let x = d3.scaleBand()
-    .domain(d3.range(data.length))
-    .range([margin.left, width - margin.right])
-    .padding(0.1)
-
-    let y = d3.scaleLinear()
-    .domain([0, d3.max(data, d => d.value)]).nice()
-    .range([height - margin.bottom, margin.top])
-
-    
-
-    svg.append('g').attr("fill", color)
-        .selectAll("rect")
-        .data(data)
-        .join("rect")
-            .attr("x", (d, i) => x(i))
-            .attr("y", d => y(d.value))
-            .attr("height", d => y(0) - y(d.value))
-            .attr("width", x.bandwidth());
-
-    svg.append("g").call(xAxis);
-    svg.append("g").call(yAxis);
-}
-
-},{"./cie.js":1,"./filter.js":2,"./imageprocessing.js":5,"./randomgeneration.js":7,"./rgb.js":8,"./rgbimage.js":9,"./signal.js":10,"./srgb.js":11,"./tensor.js":12,"./utility/array_util.js":13,"./utility/num_util.js":14}],7:[function(require,module,exports){
-const { clampTo } = require('./utility/num_util.js');
-
-//Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
-//probabilities of two outcomes. Probability in excess of a is distributed evenly 
-//using a RobinHood algorithm. Returns arrays K and V where K is indices of
-//the outcomes in the upper halves of each bin and V is the probability of the
-//outcome in the lower halves of the bins. 
-function robinHoodSquaredProbHistogram(p) {
-    let K = []; //Indices corresponding to top of bar
-    let V = []; //Bar division point
-    let n = p.length;
-    let a = 1 / n;
-    let i = 0
-    let j = 0; //i is index of min p. j is index of max p
-
-    for (let y = 0; y < n; y++) {
-        K[y] = y;
-        V[y] = (y + 1) * a;
-    }
-
-    for (let m = 0; m < n - 1; m++) {
-
-        //1. Find the indices i of minimum probability and j of maximum probability
-        for (let s = 0; s < p.length; s++) {
-            if (p[s] < p[i]) {
-                i = s;
-            } else if (p[s] > p[j]) {
-                j = s;
-            }
-        }
-        //2. Distribute probability above a from maximum bar to minimum bar
-        K[i] = j;
-        V[i] = (i * a) + p[i];
-        p[j] = p[j] - (a - p[i]);
-        p[i] = a;
-    }
-
-    return {'K': K, 'V': V}
-}
-
-//Generates a random index from a probability histogram. 
-//A probability histogram is represented by the arrays K and V
-//First generates a random float from 0 through 1. 
-//stored in arr
-function randProbHistogramInt(K, V) {
-    //check that K and V are arrays of the same length
-    let n = K.length;
-    let U = Math.random();
-    let j = Math.floor(n * U);
-    if (U < V[j]) {
-        return j;
-    }
-    return K[j];
-}
-
-//Returns an integer greater or equal to min and less than (min + range).
-function randInt(min, range) {
-    return Math.floor(Math.random() * range) + min;
-}
-
-//Generates list of N random integers greater or equal to min and less than (min + range).
-function randIntArray(min, range, n=1) {
-    let ra = [];
-    for (let i = 0; i < n; i++) {
-        ra[i] = randInt(min, range);
-    }
-    return ra;
-}
-
-//Generates random values in the normal distribution from two uniform random numbers from the unit interval.
-//Set xy argument to true to generate two random normal values at once. 
-function BoxMuller(xy=false) {
-    let U1 = Math.random(),
-        U2 = Math.random(),
-        x;
-    if (U1 === 0) { x = 0 }
-    else { x = Math.sqrt(-2 * Math.log(U1)) * Math.cos(2 * Math.PI * U2)}
-    
-    if (Number.isNaN(x)) {
-        throw new Error("Generated values " + U1 + " " + U2 + "are undefined for BoxMuller method");
-    }
-
-    if (xy) {
-        let y = Math.sqrt(-2 * Math.log(U1)) * Math.sin(2 * Math.PI * U2);
-        return [x, y]
-    }
-    return x;  
-}
-
-//Uses the boxmuller method to generate random values in a gaussian distribution with specified mean and standard
-//deviation. Set xy argument to true to generate two random gaussians at once. 
-function gaussBoxMuller(mean, stdDev, xy=false) {
-    let normRand = BoxMuller(xy);
-
-    if (xy) return [normRand[0] * stdDev + mean, normRand[1] * stdDev + mean];
-    return normRand * stdDev + mean;
-}
-
-//Generates random gray value from gaussian distribution. Suggested stdDeviations: 16, 32, 54
-function gaussGray(res, stdDev, mean=128) {
-    let randGray = [],
-        p = 0,
-        gVal;
-
-    if (res % 2 === 1) {
-       gVal = clampTo(Math.round(gaussBoxMuller(mean, stdDev, false)),0, 255, false);
-       randGray.push(gVal);
-       p++;
-    }
-    while (p < res) {
-        gVal = gaussBoxMuller(mean, stdDev, true);
-        randGray.push(Math.round(clampTo(gVal[0], 0, 255, true)));
-        randGray.push(Math.round(clampTo(gVal[1], 0, 255, true)));
-        p += 2;
-    }
-    return randGray;
-}
-
-module.exports.rhSquaredProbHist = robinHoodSquaredProbHistogram;
-module.exports.randPHistInt = randProbHistogramInt;
-module.exports.randInt = randInt;
-module.exports.gaussGray = gaussGray;
-module.exports.randIntArray = randIntArray;
-
-
-},{"./utility/num_util.js":14}],8:[function(require,module,exports){
-const { invert, dot } = require('./flatimage/linear.js');
-const redLevel = (rgbColor) => rgbColor[0];
-const greenLevel = (rgbColor) => rgbColor[1];
-const blueLevel = (rgbColor) => rgbColor[2];
-const rgb = module.exports
-
-RGBA = {
-    color : (r, g, b, a) => [r, g, b, a ? a : 255],
-    redLevel,
-    greenLevel,
-    blueLevel,
-    alphaLevel : (rgbaColor) => rgbaColor[3]
-} 
-RGB = {
-    color : (r, g, b) => [r, g, b],
-    redLevel,
-    greenLevel,
-    blueLevel
-} 
-let averageChannelLevel = (rgbColor) => (rgbColor[0] + rgbColor[1] + rgbColor[2]) / 3;
-XYZconversionMatrix = (primaryCoords, XYZWhite) => {
-    let primXYZ = [
-        [primaryCoords[0][0],primaryCoords[1][0], primaryCoords[2][0]],
-        [primaryCoords[0][1],primaryCoords[1][1], primaryCoords[2][1]],
-        [primaryCoords[0][2],primaryCoords[1][2], primaryCoords[2][2]],
-    ]
-
-    let iPXYZ = invert(primXYZ);
-    let XYZScalars = multiply(iPXYZ, XYZWhite);
-    scaleMatrix = [[XYZScalars[0], 0, 0], [0, XYZScalars[1], 0], [0, 0, XYZScalars[2]]];
-    return multiply(primXYZ, scaleMatrix);
-}
-
-function rgbWhiteToXYZ(whiteCoords) {
-    whiteY = greenLevel(whiteCoords);
-    return whiteCoords.map( cc => cc / whiteY);
-}
-
-let createRGBRelativeLuminance = (XYZconversionMatrix) =>
-    rgb => dot([redLevel(rgb), greenLevel(rgb), blueLevel(rgb)], XYZconversionMatrix[1]);
-
-let gradient = (start, end, step) => {
-    let grad = [];
-
-    for (let i = 0; i < step; i++) {
-        let intenseEnd = i;
-        let intenseStrt = step - i;
-
-        let color = RGBA.color(
-            Math.round((intenseStrt * RGBA.redLevel(start) + intenseEnd * RGBA.redLevel(end)) / step),
-            Math.round((intenseStrt * RGBA.greenLevel(start) + intenseEnd * RGBA.greenLevel(end)) / step),
-            Math.round((intenseStrt * RGBA.blueLevel(start) + intenseEnd * RGBA.blueLevel(end)) / step)
-        );
-
-        grad[i] = color;
-    }
-    return grad;
-}
-
-module.exports = {
-    RGBA,
-    RGB,
-    averageChannelLevel,
-    XYZconversionMatrix,
-    createRGBRelativeLuminance,
-    gradient
-}
-},{"./flatimage/linear.js":3}],9:[function(require,module,exports){
-const { relativeLuminence, linearize8Bit } = require('./srgb.js');
-const { lightness } = require('./cie.js');
-const { Tensor } = require('./tensor.js');
-
-const RGBImage = (function() {
-    function RGBImage(img, width, a) {
-        this.colorIdx = 0;
-        this.width = width;
-        this.height = img.length / width / (a ? 4 : 3);
-        Tensor.call(this, [this.height, width, a ? 4 : 3], img);
-    }
-    RGBImage.prototype = Object.create(Tensor.prototype);
-    RGBImage.prototype.constructor = RGBImage;
-    const $RGBI = RGBImage.prototype;
-
-    $RGBI.tupleSize = function() {
-        return this.shape[3];
-    }
-    $RGBI.imageSize = function() {
-        return this.width * this.height;
-    }
-    $RGBI.forEachPixel = function(callbackFn, a=false) {
-        let pixel = [];
-        let chanIndex = 0;
-        let totalChans = this.a && a ? 4 : 3;
-        let range = [[],[],[0, [], totalChans - 1]];
-
-        this.forEachVal(range, (value, dataIndex) => {
-            pixel[chanIndex++] = value;
-            if (chanIndex === totalChans) {
-                callbackFn(pixel, dataIndex - chanIndex + 1); //Helpful to pass along the tensorIndex?
-                pixel = [];
-                chanIndex = 0;
-            }
-        });
-    }
-
-    $RGBI.toPixels = function(a=false) {
-        let pixelList = [];
-        let endIndex = 0;
-        this.forEachPixel((pixel) => {
-            pixelList[endIndex++] = pixel;
-        }, a);
-
-        return pixelList;
-    }
-
-    $RGBI.toLightness = function(range=255) {
-        let lightnessList = [];
-        let endIndex = 0;
-        this.forEachPixel((pixel) => {
-            lightnessList[endIndex++] = Math.round(
-                (lightness(relativeLuminence(linearize8Bit(pixel)))) / 100 * range 
-            )
-        }, false);
-        return lightnessList;
-    }
-
-    $RGBI.lightnessDataIndices = function(range=255) {
-        let lightnessList = this.toLightness(range);
-        let lightDataIndices = [];
-        for (let m = 0; m < lightnessList.length; m++) {
-            if (!lightDataIndices[lightnessList[m]]) {
-                lightDataIndices[lightnessList[m]] = [];
-            }
-            lightDataIndices[lightnessList[m]].push(m * this.tupleSize());
-        }
-        return lightDataIndices;
-    }
-
-    $RGBI.pixelAt = function(rowIndex, colIndex) {
-        return this.getExplicit([rowIndex, colIndex]);
-    }
-    $RGBI.redChannelAt = function(rowIndex, colIndex) {
-        return this.getExplicit([rowIndex, colIndex, 0]);
-    }
-    $RGBI.greenChannelAt = function(rowIndex, colIndex) {
-        return this.getExplicit([rowIndex, colIndex, 1]);
-    }
-    $RGBI.blueChannelAt = function(rowIndex, colIndex) {
-        return this.getExplicit([rowIndex, colIndex, 2]);
-    }
-
-    $RGBI.getRedChannel = function(flat=true) {
-        return this.get([[],[],0]);
-    }
-    $RGBI.getGreenChannel = function(flat=true) {
-        return this.get([[],[],1]);
-    }
-    $RGBI.getBlueChannel = function(flat=true) {
-        return this.get([[],[],2]);
-    }
-    $RGBI.getAlphaChannel = function(flat=true) {
-        if (this.tupleSize() < 4) return null;
-        return this.get([[],[],3]);     
-    }
-
-    return RGBImage;
-})();
-
-// const ComplexImage = (function() {
-//     function ComplexImage(ReX, ImX=null, width, a) {
-//         this.ReX = ReX;
-//         this.ImX = ImX ? ImX : zeros([ReX.shape])
-//     }
-// })
-module.exports = {
-    RGBImage
-}
-},{"./cie.js":1,"./srgb.js":11,"./tensor.js":12}],10:[function(require,module,exports){
-'use strict';
-const { dim } = require('./flatimage/linear');
-const { zeros } = require('./utility/array_util.js');
-const { bankRound } = require('./utility/num_util.js');
-const { isPowerOfTwo } = require('./utility/type_util.js');
+const { dim } = require('../utility/linearalg_util');
+const { zeros } = require('../utility/array_util.js');
+const { bankRound } = require('../utility/num_util.js');
+const { isPowerOfTwo } = require('../utility/type_util.js');
 
 const displayRefA = 1;
 const audioRefA = 0.00001;
@@ -2120,155 +925,647 @@ module.exports = {
     multiplyFreq,
     divideFreq
 }
-},{"./flatimage/linear":3,"./utility/array_util.js":13,"./utility/num_util.js":14,"./utility/type_util.js":16}],11:[function(require,module,exports){
-const { multiply } = require('./flatimage/linear.js');
-const { createRGBRelativeLuminance, RGBA, RGB } = require('./rgb.js');
+},{"../utility/array_util.js":12,"../utility/linearalg_util":13,"../utility/num_util.js":14,"../utility/type_util.js":16}],6:[function(require,module,exports){
+const { RGBImage } = require('./tensorsignal/rgbimage.js');
+const { equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./tensorsignal/imageprocessing.js');
+const { RGB, RGBA } = require('./colorspace/rgb.js');
+const { relativeLuminence, linearize8Bit } = require('./colorspace/srgb.js');
+const { lightness } = require('./colorspace/cie.js');
+const { zeros } = require('./utility/array_util.js');
+const { round } = require('./utility/num_util.js');
+const { randIntArray, gaussGray } = require('./stat/randomgeneration.js');
+const { extendRealFreqDomain, FFT, inverseFFT } = require('./flatsignal/signalprocessing.js');
+const { impulse, psf } = require('./flatsignal/filter.js');
+const { Tensor } = require('./tensor/tensor.js');
+// function checkFFT() {
+//     let r = randIntArray(0, 10, 32);
+//     let i = zeros(32);
+//     console.log(r);
+//     console.log(i);
+//     FFT(r, i);
+//     console.log(r);
+//     console.log(i);
+//     inverseFFT(r, i);
+//     console.log(r);
+//     console.log(i);
+// }
 
-//This matrix is used to convert linearized sRGB color to its corresponding color
-//in the XYZ colorspace. The XYZ color is the matrix product of the 
-//linearized sRGB color vector and the conversion matrix. 
-const sRGBtoXYZMatrix = [
-    [0.41239079926595923, 0.35758433938387785, 0.1804807884018343],
-    [0.21263900587151022, 0.7151686787677557, 0.07219231536073371],
-    [0.019330818715591835,0.11919477979462596, 0.9505321522496606]
-]
+let img = new Image();
+let animate = false;
+let odd = true;
+const lValRange = 255;
+const gradientSize = 25;
+const gradOffset = 15;
+const timestep = 30;
+img.src = 'img/flowers.jpg';
 
-const XYZtosRGBMatrix = [
-    [3.2404542, -1.5371385, -0.4985314],
-    [-0.9692660,  1.8760108,  0.0415560],
-    [0.0556434, -0.2040259,  1.0572252]
-]
+img.onload = function() {
+    console.log("hi");
 
-//Coordinates of sRGB red green and blue primary colors in linearized 3D space. 
-const primaryChromaticityCoordinates = {
-    matrix : [
-        [0.64, 0.33, 0.03],
-        [0.30, 0.60, 0.10],
-        [0.15, 0.06, 0.79]
-    ],
-    obj : {
-        r : {
-            x : 0.64,
-            y : 0.33,
-            z : 0.03
+    let data = [0,1,2,3,4,5,6,7,8];
+    console.log(data);
+    let tt = new Tensor([3, 3], data);
+    console.log(tt);
+    console.log(tt.pad([4, 4], [4, 4], true, "constant"));
+    console.log(tt.toNestedArray());
+    // console.log("settring [], 0,2 " + tt.set([[], [0, 2]], [9,1,9,1,9,1]));
+    // tt.pad([1,1], [1,1], [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+    // console.log("gettring [], 0,2 " + tt.get([[], [0, 2]], [9,1,9,1,9,1]));
+    // console.log(tt.data);
+    // console.log(tt.toNestedArray());
+    // console.log(psf.gauss(5, 5, 1));
+    // let canvas = document.getElementById("manip");
+    // let context = canvas.getContext('2d');
+    // let whratio = this.height / this.width;
+    // let cwidth = 500;
+    // let cheight = whratio * cwidth;
+    // canvas.width = cwidth;
+    // canvas.height = cheight;
+    // context.drawImage(this, 0, 0, cwidth, cheight);
+    // let contextData = context.getImageData(0,0, cwidth, cheight);
+    // let rawImgData = contextData.data;
+    // console.log("image pix = " + rawImgData.length);
+    // console.log(rawImgData)
+    // let jkImage = new RGBImage(rawImgData.slice(0,400), 10, true);
+    // console.log(jkImage.toPixels(true));
+    // console.log(jkImage.toNestedArray());
+    // let chanTotal = 0;
+    // jkImage.size;
+    // console.log(`Getting lightness values for ${jkImage.width * jkImage.height} pixels`)
+    // console.log(jkImage.toLightness());
+    // equalizeImgLight(jkImage, 0, 256);
+    // // console.log(read.getRedChannel());
+    // // console.log(read.widthRes);
+    // // console.log(read.heightRes);
+    // // console.log(read.widthRes * read.heightRes * 4);
+    // let LI = jkImage.lightnessDataIndices();
+
+    // convertImagetoASCII(rawImgData, cwidth, (textImage) => {
+    //     document.getElementById('result').innerHTML = textImage;
+    // });
+
+    // convertImagetoGrayscale(rawImgData, cwidth, (gsImageData) => {
+    //     contextData.data.set(gsImageData);
+    //     context.putImageData(contextData, 0, 0); 
+    // });
+    // getRandomColorsOfLight(90000, 77, (randImageData) => {
+    //     contextData.data.set(randImageData);
+    //     context.putImageData(randImageData, 0, 0);
+    // });
+
+    // convertImgToRandBrightGradient(rawImgData, cwidth, (rImageData) => {
+    //     console.log(rImageData);
+    //     contextData.data.set(rImageData);
+    //     context.putImageData(contextData, 0, 0); 
+    // })
+    let pw = 3;
+    let grays = gaussGray(pw * pw, 32);
+    
+    console.log(grays.length)
+    let hist = [];
+    for (let m = 0; m < 256; m++) {
+        hist[m] = 0;
+    }
+    for (let g = 0; g < grays.length; g++) {
+        hist[grays[g]] += 1;
+    }
+
+    data = [];
+    for (let i = 0; i < hist.length; i++) {
+        data.push({name: i, value: hist[i] / grays.length})
+    }
+    displayHistogram('#old', data, "steelblue", 500, 1200)
+    let grayImg = [];
+    for (let g = 0; g < grays.length; g++) {
+        grayImg.push(grays[g], grays[g], grays[g], 255);
+    }
+    console.log(padRealImage(grays, pw, 4, 6, 6));
+    console.log(grayImg);
+    console.log("Fourier");
+    let { ReX, ImX } = FFT2DFromRealImage(grayImg, pw, 4, true);
+    console.log(ReX);
+    inverseFFT2DImage(ReX, ImX, 4, pw);
+    console.log(ReX)
+    contextData.data.set(new Uint8ClampedArray(grayImg));
+    context.putImageData(contextData, 0, 0); 
+
+    getLightnessValuesofImg(rawImgData, cwidth, (light) => {
+        let lightIdxs = {};
+        let original = {};
+        for (let m = 1; m < light.length; m++) {
+            if (!lightIdxs[light[m]]) {
+                lightIdxs[light[m]] = [];
+                original[light[m]] = [];
+            }
+            lightIdxs[light[m]].push(m * 4);
+            original[light[m]].push([
+                m * 4,
+                rawImgData[m * 4],
+                rawImgData[m * 4 + 1],
+                rawImgData[m * 4 + 2],
+                rawImgData[m * 4 + 3]
+            ]);
+        }
+        // let eqimg = equalizeLightness(rawImgData);
+        // console.log(eqimg)
+        // contextData.data.set(eqimg);
+        // context.putImageData(contextData, 0, 0); 
+ 
+        console.log("light Indexes")
+        console.log(lightIdxs)
+        document.getElementById('stop').addEventListener('click', function() {
+            if (animate) {
+                animate = false;
+                console.log("stop");
+                setTimeout(function() {
+                    console.log("stopping")
+                    reverseCanvas(lightIdxs, context, cwidth, cheight);
+                },
+                gradientSize * timestep * 3);
+            }
+        });
+        document.getElementById('start').addEventListener('click', function() {
+            if (!animate) {
+                //make so max does not overflow
+                drawTheThing(0, gradOffset ? gradOffset : gradientSize, lightIdxs, cwidth, cheight, context);
+                animate = true;
+            }     
+        });
+    });
+    getLightnessHistogram(rawImgData, (hst) => {
+        displayHistogram('svg', hst, "steelblue", 500, 1200)
+    })  
+}
+
+
+function getLightnessHistogram(rawImgData, next) {
+    let binCount = 101,
+    max = 100,
+    min = 0,
+    range = max - min,
+    binSize = range / binCount;
+
+    let hist = histogram(rawImgData, (rgbColor) => {
+        let Y = relativeLuminence(linearize8Bit(rgbColor));
+        return Math.round((lightness(Y) / 100) * (max));
+    },
+    binCount,
+    min,
+    max,
+    true
+    );
+    
+    next(hist.map((p, i) => {
+        return {name: (i * binSize) + min, value : p}
+    }));
+
+    // let http = new XMLHttpRequest();
+    // let url = "/lhist";
+    // http.open('POST', url, true);
+    // http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+    // http.onreadystatechange = function() {
+    //     if (http.readyState == 4 && http.status == 200) {
+    //         next(JSON.parse(http.responseText));
+    //     }
+    // }
+    // http.send('imageWidth=' + imageWidth + '&' + 'imageData=' + rawImgData);
+}
+
+function equalizeLightness(rawImgData) {
+    return equalizeImgLight(rawImgData, 0, 255);
+}
+function reverseCanvas(original, context, cwidth, cheight) {
+    let imageData = context.getImageData(0,0, cwidth, cheight);
+    for (let m = 0; m < lValRange + 1; m++) {
+        setTimeout(function() {
+            let L = lValRange - m;
+            if (original[L]) {
+                original[L].forEach( p => {
+                    for (let c = 1; c < 5; c++) {
+                        imageData.data[p[0] + c - 1] = p[c];
+                    }
+                });
+            }
+            context.putImageData(imageData, 0 , 0);
         },
-        g : {
-            x : 0.30,
-            y : 0.60,
-            z : 0.10
-        },
-        b : {
-            x : 0.15,
-            y : 0.06,
-            z : 0.79
+       m * timestep);
+    }
+    console.log(imageData.data);
+}
+function updateLPixels(start, y, lightIdxs, grad, imageData, context, flip) {
+    let L;
+    if (flip) {
+        L = y + start;
+    } else {
+        L = lValRange - (y + start);
+    }
+    if (lightIdxs[L]) {
+        lightIdxs[L].forEach( p => {
+            for (let c = 0; c < 4; c++) {
+                imageData.data[p + c] = grad[y * 4 + c];
+            }
+        });
+    }
+    context.putImageData(imageData, 0, 0);
+}
+
+function drawTheThing(min, max, lightIdxs, cwidth, cheight, context) {
+    getRandomLightGradient(min, max, function(grad) {
+        let imageData = context.getImageData(0,0, cwidth, cheight);
+        for (let y = 0; y < max - min; y++) {
+            setTimeout(function() {
+                updateLPixels(min, y, lightIdxs, grad, imageData, context, odd);
+            }, timestep * y)
+        }
+    
+        if (animate) {
+            setTimeout(function() {
+                let nxtMin = max;
+                let nxtMax = nxtMin + gradientSize;
+                if (nxtMin >= lValRange) {
+                    nxtMin = 0;
+                    nxtMax = gradOffset === 0 ? gradientSize : nxtMin + gradOffset;
+                    odd = !odd;
+                }
+                if (nxtMax > lValRange) {
+                    nxtMax = lValRange;
+                }
+                drawTheThing(nxtMin, nxtMax, lightIdxs, cwidth, cheight, context)
+            },
+                timestep * (max - min)
+            );    
+        }
+    });    
+}
+function filterImage(route, rawImgData, imageWidth, next) {
+    let http = new XMLHttpRequest();
+    let url = route;
+    http.open('POST', url, true);
+    http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+    http.onreadystatechange = function() {
+        if (http.readyState == 4 && http.status == 200) {
+            let unclampedData = http.responseText.slice(1, http.responseText.length - 1).split(",");
+            let filtrdImgData = new Uint8ClampedArray(unclampedData);
+            next(filtrdImgData);
         }
     }
+    http.send('imageWidth=' + imageWidth + '&' + 'imageData=' + rawImgData);
 }
-
-//Chromaticity Coordinates of sRGB reference white (CIE Illuminant D65) in linear 3D space.
-const whitepointChroma = {
-    matrix : [0.3127, 0.3290, 0.3583],
-    obj : {
-        x : 0.3127,
-        y : 0.3290,
-        z : 0.3583
+function convertImagetoASCII(rawImgData, imageWidth, next) {
+    let http = new XMLHttpRequest();
+    let url = "/ascii";
+    http.open('POST', url, true);
+    http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+    http.onreadystatechange = function() {
+        if (http.readyState == 4 && http.status == 200) {
+            next(http.responseText);
+        }
     }
+    http.send('imageWidth=' + imageWidth + '&' + 'imageData=' + rawImgData);
+}
+function convertImagetoGrayscale(rawImgData, imageWidth, next) {
+    filterImage('/gray', rawImgData, imageWidth, next);
+}
+function convertImageToRand(rawImgData, imageWidth, next) {
+    filterImage('/randimg', rawImgData, imageWidth, next);
+}
+function convertImageToRandomColorLayers(rawImgData, imageWidth, next) {
+    filterImage('/randlayer', rawImgData, imageWidth, next);
+}
+function convertImgToRandBrightGradient(rawImgData, imageWidth, next) {
+    filterImage('/randgradient', rawImgData, imageWidth, next);
+}
+function getLightnessValuesofImg(rawImgData, imageWidth, next) {
+    filterImage('/light', rawImgData, imageWidth, next);
 }
 
-//Given a linearized sRGB color, calculates the Relative Luminence of the color. 
-//Relative Luminence is the Y stimulus in the XYZ colorspace.
-const relativeLuminence = createRGBRelativeLuminance(sRGBtoXYZMatrix);
-
-//Linearizes sRGB gamma-encoded color channel value in unit interval by applying
-// sRGGB gamma decoding step-function. Value returned is in unit interval. 
-function decodeGammaUI(stimulus) {
-    if (stimulus < 0.04045) {
-        return stimulus / 12.92;
-    } else {
-        return Math.pow(((stimulus + 0.055) / 1.055), 2.4);
+function getRandomLightGradient(Lstart, Lend, next) {
+    let http = new XMLHttpRequest();
+    let url = "/randlgrad";
+    http.open('POST', url, true);
+    http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+    http.onreadystatechange = function() {
+        if (http.readyState == 4 && http.status == 200) {
+            let unclampedData = http.responseText.slice(1, http.responseText.length - 1).split(",");
+            let grad = new Uint8ClampedArray(unclampedData);
+            next(grad);
+        }
     }
+    http.send('start=' + Lstart + "&end=" + Lend);
 }
-
-//Linearizes sRGB gamma-encoded  8bit color channel value by applying
-// sRGB gamma decoding step function. Value returned is in unit interval.
-function decodeGamma8Bit(colorChannel) {
-    let uiCC = colorChannel / 255;
-    return decodeGammaUI(uiCC);
-}
-
-//From linear stimulus in unit Interval applies sRGB piecewise gamma encoding function .
-// Returned value is in Unit Interval.
-function encodeGammaUI(linStim) {
-    if (linStim < 0.00313080495) {
-        return linStim * 12.92;
-    } else {
-        return Math.pow(linStim, 1 / 2.4) * 1.055 - 0.055;
+function getRandomColorsOfLight(x, L, next) {
+    let http = new XMLHttpRequest();
+    let url = "/rand";
+    http.open('POST', url, true);
+    http.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+    http.onreadystatechange = function() {
+        if (http.readyState == 4 && http.status == 200) {
+            let unclampedData = http.responseText.slice(1, http.responseText.length - 1).split(",");
+            let randImgData = new ImageData( new Uint8ClampedArray(unclampedData), 300);
+            next(randImgData);
+        }
     }
+    http.send('pixels=' + x + '&' + 'light=' + L);
 }
 
-//From linear stimulus in unit interval applies sRGB piecewise gamma encoding function .
-// Returned value is 8Bit Integer.
-function encodeGamma8Bit(linStim) {
-    let uiCC = encodeGammaUI(linStim);
-    return Math.round(uiCC * 255); 
+function displayHistogram(selector, data, color, height, width) {
+    let svg = d3.select(selector);
+    let margin = ({top: 30, right: 0, bottom: 30, left: 40});
+    let yAxis = g => g
+    .attr("transform", `translate(${margin.left},0)`)
+    .call(d3.axisLeft(y).ticks(null, data.format))
+    .call(g => g.select(".domain").remove())
+    .call(g => g.append("text")
+        .attr("x", -margin.left)
+        .attr("y", 10)
+        .attr("fill", "currentColor")
+        .attr("text-anchor", "start")
+        .text(data.y))
+
+    let xAxis = g => g
+    .attr("transform", `translate(0,${height - margin.bottom})`)
+    .call(d3.axisBottom(x).tickFormat(i => data[i].name).tickSizeOuter(0))
+
+    let x = d3.scaleBand()
+    .domain(d3.range(data.length))
+    .range([margin.left, width - margin.right])
+    .padding(0.1)
+
+    let y = d3.scaleLinear()
+    .domain([0, d3.max(data, d => d.value)]).nice()
+    .range([height - margin.bottom, margin.top])
+
+    
+
+    svg.append('g').attr("fill", color)
+        .selectAll("rect")
+        .data(data)
+        .join("rect")
+            .attr("x", (d, i) => x(i))
+            .attr("y", d => y(d.value))
+            .attr("height", d => y(0) - y(d.value))
+            .attr("width", x.bandwidth());
+
+    svg.append("g").call(xAxis);
+    svg.append("g").call(yAxis);
 }
 
-//Converts sRGB color to XYZ colorspace.
-function sRGBtoXYZ(rgb) {
-    let linRGB = linearize8Bit(rgb);
-    return multiply(sRGBtoXYZMatrix, linRGB);
-}
-//Linearizes the 8Bit color channels of a gamm-encoded sRGB color.
-function linearize8Bit(rgb) {
-    return rgb.map(cc => decodeGamma8Bit(cc));
-}
-//Gamma-encodes each color channel of a linear sRGB color to 8Bit values.
-function delinearize8Bit(rgb) {
-    return rgb.map(cc => encodeGamma8Bit(cc));
-}
-//Converts XYZ color to Gamma-encoded sRGB
-function XYZtosRGB(xyz) {
-    let linRGB = multiply(XYZtosRGBMatrix, xyz);
-    return delinearize8Bit(linRGB);
+},{"./colorspace/cie.js":1,"./colorspace/rgb.js":2,"./colorspace/srgb.js":3,"./flatsignal/filter.js":4,"./flatsignal/signalprocessing.js":5,"./stat/randomgeneration.js":8,"./tensor/tensor.js":9,"./tensorsignal/imageprocessing.js":10,"./tensorsignal/rgbimage.js":11,"./utility/array_util.js":12,"./utility/num_util.js":14}],7:[function(require,module,exports){
+const { zeros } = require('../utility/array_util.js');
+
+const DiscreteDistribution = (function() {
+    function DiscreteDistribution(data, intervalCount, min, max) {
+        this.dist = data;
+        this.intervalCount = intervalCount;
+        this.intervalSize = (max - min + 1) / intervalCount;
+        this.min = min;
+        this.max = max;
+    }
+    const $DD = DiscreteDistribution.prototype;
+
+    $DD.intervalIndex = function(value) {
+        let index = Math.floor((value - this.min) / this.intervalSize);
+        if (this.dist[index] === undefined) return null;
+        return index;
+    }
+
+    // $DD.midpointArea = function(intervalIndex) {
+    //     return this.dist[intervalIndex] * this.intervalSize;
+    // }
+    // $DD.trapezoidArea = function(intervalIndex) {
+    //     let sideA = intervalIndex === 0 ? 0 : ((this.dist[intervalIndex] - this.dist[intervalIndex - 1]) / 2) + this.dist[intervalIndex];
+    //     let sideB = intervalIndex === this.dist.length - 1;
+    // }
+    return DiscreteDistribution;
+})();
+
+const ProbabilityDist = (function() {
+    function ProbabilityDist(probabilities, min, max) {
+        DiscreteDistribution.call(this, probabilities, probabilities.length, min, max);
+    }
+    ProbabilityDist.prototype = Object.create(DiscreteDistribution.prototype);
+    ProbabilityDist.prototype.constructor = ProbabilityDist;
+    const $PD = ProbabilityDist.prototype;
+
+    $PD.mean = function() {
+        return this.dist.reduce((acc, prob, i) => acc + ((i + 1) * this.intervalSize + this.min) * prob, 0);
+    }
+
+    $PD.pdf = function() {
+        return this.dist.map(prob => parseFloat(prob / this.intervalSize).toPrecision(4));
+    }
+
+    $PD.cdf = function() {
+        let acc = 0;
+        return this.dist.map((acc => prob => parseFloat(acc += prob).toPrecision(4))(0));
+    }
+    return ProbabilityDist;
+})();
+
+const FrequencyDist = (function() {
+    function FrequencyDist(outcomes, intervalCount, min, max) {
+        this.totalOutcomes = 0;
+
+        DiscreteDistribution.call(this, zeros([intervalCount]), intervalCount, min, max);
+        this.populate(outcomes);
+    }
+    FrequencyDist.prototype = Object.create(DiscreteDistribution.prototype);
+    FrequencyDist.prototype.constructor = FrequencyDist;
+    const $FD = FrequencyDist.prototype;
+
+    $FD.populate = function(outcomes) {
+        for (let oc of outcomes) {
+            if (oc >= this.min && oc < this.max) {
+                this.totalOutcomes++;
+                this.dist[this.intervalIndex(oc)] += 1;
+            }
+        }
+    }
+    $FD.mean = function() {
+        return this.dist.reduce((acc, freq) => 
+            acc + (freq * ((i + 1) * this.intervalSize + this.min)),
+            0
+        ) / this.totalOutcomes;
+    }
+    //Returns the cumulative frequency districution as a list A, where each element j is the sum of the 
+    //frequencies of the distribution from 0 through j - 1.
+    $FD.cumulativeFrequency = function() {
+        return this.dist.map((acc => freq => acc += freq)(0));
+    }
+    //Calculates the probability of each outcome interval and returns the corresponding probability distribution object.
+    $FD.toProbabilityDist = function() {
+        let probData = this.dist.map(freq => freq / this.totalOutcomes);
+        return new ProbabilityDist(probData, this.min, this.max);
+    }
+
+    $FD.pdf = function() {
+        return this.dist.map(freq => parseFloat(freq / this.totalOutcomes / this.intervalSize).toPrecision(4));
+    }
+
+    $FD.cdf = function() {
+        return this.dist.map((acc => freq => parseFloat(acc + freq))(0));
+    }
+    //Given a numerical range, equalizes the probabilities of the distribution's outcomes across the new range. 
+    //Returns list of equalized value of each interval. 
+    $FD.equalize = function(toRange, withMin=0) {
+        let range = toRange - 1;
+        let cumHist = this.cumulativeFrequency();
+        let cumMin = 0;
+        for (let i = 0; i < cumHist.length; i++) {
+            if (cumHist[i] > 0) {
+                cumMin = cumHist[i];
+                break;
+            }
+        }
+        let cumTotal = this.totalOutcomes - cumMin;
+        let outcome = cumHist.map(cumFreq => withMin + Math.round((cumFreq - cumMin) / cumTotal * range));
+        for (let i = 0; i < outcome.length; i++) {
+            if (outcome[i] < withMin) {
+                outcome[i] = withMin;
+            } else {
+                break;
+            }
+        }
+        return outcome;
+    }
+    return FrequencyDist;
+})();
+
+module.exports = { 
+    DiscreteDistribution,
+    FrequencyDist,
+    ProbabilityDist,
+};
+},{"../utility/array_util.js":12}],8:[function(require,module,exports){
+const { clampTo } = require('../utility/num_util.js');
+
+//Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
+//probabilities of two outcomes. Probability in excess of a is distributed evenly 
+//using a RobinHood algorithm. Returns arrays K and V where K is indices of
+//the outcomes in the upper halves of each bin and V is the probability of the
+//outcome in the lower halves of the bins. 
+function robinHoodSquaredProbHistogram(p) {
+    let K = []; //Indices corresponding to top of bar
+    let V = []; //Bar division point
+    let n = p.length;
+    let a = 1 / n;
+    let i = 0
+    let j = 0; //i is index of min p. j is index of max p
+
+    for (let y = 0; y < n; y++) {
+        K[y] = y;
+        V[y] = (y + 1) * a;
+    }
+
+    for (let m = 0; m < n - 1; m++) {
+
+        //1. Find the indices i of minimum probability and j of maximum probability
+        for (let s = 0; s < p.length; s++) {
+            if (p[s] < p[i]) {
+                i = s;
+            } else if (p[s] > p[j]) {
+                j = s;
+            }
+        }
+        //2. Distribute probability above a from maximum bar to minimum bar
+        K[i] = j;
+        V[i] = (i * a) + p[i];
+        p[j] = p[j] - (a - p[i]);
+        p[i] = a;
+    }
+
+    return {'K': K, 'V': V}
 }
 
-//Creates gray sRGB color from gray value between 0 and 256. 
-//Set a to true if an RGBA output is desired.
-function gray(gVal, a=false) {
-    return a ? RGBA.color(gVal, gVal, gVal) : RGBA.color(gVal, gVal, gVal);
-}
-//Not a proper luma conversion for sRGB, 
-//relies on primaries and white point in NTSC color spaces like YIQ an YUV
-// function lumaCCIR601(rPrime, gPrime, bPrime) {
-//     let YPrime = 0.299 * rPrime + 0.587 * gPrime + 0.114 * bPrime;
-//     return YPrime;
-// }
-
-//Again not a proper luma function for sRGB, output should be luma values between 16 and 235
-//This function produces values from 0 to 255 which must be clamped.
-// function lumaBT709(rPrime, gPrime, bPrime) {
-//     let luma = 0.2126 * rPrime + 0.7152 * gPrime + 0.0722 * bPrime;
-//     return luma;
-// }
-
-module.exports = {
-    decodeGammaUI,
-    decodeGamma8Bit,
-    encodeGammaUI,
-    encodeGamma8Bit,
-    linearize8Bit,
-    'primaryChroma' : primaryChromaticityCoordinates.matrix,
-    'whitepointChroma' : whitepointChroma.matrix,
-    relativeLuminence,
-    sRGBtoXYZ,
-    XYZtosRGB,
-    gray
+//Generates a random index from a probability histogram. 
+//A probability histogram is represented by the arrays K and V
+//First generates a random float from 0 through 1. 
+//stored in arr
+function randProbHistogramInt(K, V) {
+    //check that K and V are arrays of the same length
+    let n = K.length;
+    let U = Math.random();
+    let j = Math.floor(n * U);
+    if (U < V[j]) {
+        return j;
+    }
+    return K[j];
 }
 
-},{"./flatimage/linear.js":3,"./rgb.js":8}],12:[function(require,module,exports){
+//Returns an integer greater or equal to min and less than (min + range).
+function randInt(min, range) {
+    return Math.floor(Math.random() * range) + min;
+}
+
+//Generates list of N random integers greater or equal to min and less than (min + range).
+function randIntArray(min, range, n=1) {
+    let ra = [];
+    for (let i = 0; i < n; i++) {
+        ra[i] = randInt(min, range);
+    }
+    return ra;
+}
+
+//Generates random values in the normal distribution from two uniform random numbers from the unit interval.
+//Set xy argument to true to generate two random normal values at once. 
+function BoxMuller(xy=false) {
+    let U1 = Math.random(),
+        U2 = Math.random(),
+        x;
+    if (U1 === 0) { x = 0 }
+    else { x = Math.sqrt(-2 * Math.log(U1)) * Math.cos(2 * Math.PI * U2)}
+    
+    if (Number.isNaN(x)) {
+        throw new Error("Generated values " + U1 + " " + U2 + "are undefined for BoxMuller method");
+    }
+
+    if (xy) {
+        let y = Math.sqrt(-2 * Math.log(U1)) * Math.sin(2 * Math.PI * U2);
+        return [x, y]
+    }
+    return x;  
+}
+
+//Uses the boxmuller method to generate random values in a gaussian distribution with specified mean and standard
+//deviation. Set xy argument to true to generate two random gaussians at once. 
+function gaussBoxMuller(mean, stdDev, xy=false) {
+    let normRand = BoxMuller(xy);
+
+    if (xy) return [normRand[0] * stdDev + mean, normRand[1] * stdDev + mean];
+    return normRand * stdDev + mean;
+}
+
+//Generates random gray value from gaussian distribution. Suggested stdDeviations: 16, 32, 54
+function gaussGray(res, stdDev, mean=128) {
+    let randGray = [],
+        p = 0,
+        gVal;
+
+    if (res % 2 === 1) {
+       gVal = clampTo(Math.round(gaussBoxMuller(mean, stdDev, false)),0, 255, false);
+       randGray.push(gVal);
+       p++;
+    }
+    while (p < res) {
+        gVal = gaussBoxMuller(mean, stdDev, true);
+        randGray.push(Math.round(clampTo(gVal[0], 0, 255, true)));
+        randGray.push(Math.round(clampTo(gVal[1], 0, 255, true)));
+        p += 2;
+    }
+    return randGray;
+}
+
+module.exports.rhSquaredProbHist = robinHoodSquaredProbHistogram;
+module.exports.randPHistInt = randProbHistogramInt;
+module.exports.randInt = randInt;
+module.exports.gaussGray = gaussGray;
+module.exports.randIntArray = randIntArray;
+
+
+},{"../utility/num_util.js":14}],9:[function(require,module,exports){
 'use strict';
-const { sizeFrom, stridesFrom, isShape, toNestedArray } = require('./utility/array_util.js');
-const { reduceRangedIndex, reducedShape, trimRangedIndex, isRangedIndex } = require('./utility/rangedindex_util.js');
+const { sizeFrom, stridesFrom, isShape, toNestedArray } = require('../utility/array_util.js');
+const { reduceRangedIndex, reducedShape, trimRangedIndex, isRangedIndex } = require('../utility/rangedindex_util.js');
 
 const Tensor = (function() {
     function Tensor(shape, data) {
@@ -2492,7 +1789,510 @@ module.exports = {
     Tensor
 }
 
-},{"./utility/array_util.js":13,"./utility/rangedindex_util.js":15}],13:[function(require,module,exports){
+},{"../utility/array_util.js":12,"../utility/rangedindex_util.js":15}],10:[function(require,module,exports){
+'use strict';
+const { RGB, RGBA } = require('../colorspace/rgb.js');
+const { relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('../colorspace/srgb.js');
+const { lightness, XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('../colorspace/cie.js');
+const { bankRound, nextPowerOf2 } = require('../utility/num_util.js');
+const { zeros } = require('../utility/array_util.js');
+const { isPowerOfTwo } = require('../utility/type_util.js');
+const { RGBImage } = require('./rgbimage.js');
+const { convolveComplex } = require('../flatsignal/signalprocessing.js');
+const { FrequencyDist } = require('../stat/histogram.js');
+const { Tensor } = require('../tensor/tensor.js');
+
+//Given an RGBA image, equalizes the lightness of the image between the minimum and maximum values
+function equalizeImgLight(realImage, min, max) {
+    let histogram = new FrequencyDist(realImage.toLightness(), 64, min, max);
+    let equalCDF = histogram.equalize(256);
+    let equalData = [];
+
+    realImage.forEachPixel((pixel) => {
+        let lab = XYZtoLAB(sRGBtoXYZ(pixel));
+        let l8bit = Math.floor(LAB.LVal(lab) / 100 * 255);
+
+        if (l8bit >= min && l8bit < max) {
+            let new8BitL = equalCDF[histogram.intervalIndex(l8bit)];
+            let equalsrgb = XYZtosRGB(
+                LABtoXYZ(
+                    LAB.color(new8BitL / 255 * 100, LAB.AVal(lab), LAB.BVal(lab)
+                ), undefined, true)
+            );
+            equalData.push(...equalsrgb);
+        } else {
+            equalData.push(...pixel);
+        }
+        equalData.push(255);
+    });
+
+    return new RGBImage(equalData, realImage.width, true);
+}
+
+//Use when performing a transfrom on multi-channel flat image in place.
+//Translates the abstract index n in the input signal to its actual index in the image. 
+function makeFFTIndex(si, dimIndex, isCol, chan) {
+    let tensorIndex = [0,0,chan];
+    tensorIndex[+isCol] = dimIndex;
+    tensorIndex[+!isCol] = si;
+    return tensorIndex;
+}
+
+function radix2FFTImage(complexImage, dimIndex, isCol=false, chans=3) {
+    let ReX = complexImage.real,
+        ImX = complexImage.imag,
+        signalLength = isCol ? complexImage.height() : complexImage.width(),
+        power = bankRound(Math.log2(signalLength)),
+        j = signalLength / 2,
+        tempR,
+        tempI,
+        c;
+
+    //Sort in Reverse Bit order
+    for (let i = 1; i < signalLength; i++) {
+        if (i < j) {
+            let ti = ReX._toDataIndex(makeFFTIndex(i, dimIndex, isCol, 0));
+            let tj = ReX._toDataIndex(makeFFTIndex(j, dimIndex, isCol, 0));
+            for (c = 0; c < chans; c++) {
+                tempR = ReX.getAtDI(tj);
+                tempI = ImX.getAtDI(tj);
+                ReX.setAtDI(tj, ReX.getAtDI(ti));
+                ImX.setAtDI(tj, ImX.getAtDI(ti));
+                ReX.setAtDI(ti, tempR);
+                ImX.setAtDI(ti, tempI);
+                ti = ReX._incrementDataIndex(ti, 1, 2);
+                tj = ReX._incrementDataIndex(tj, 1, 2);
+            }
+        }
+        let k = signalLength / 2;
+        while (k <= j) {
+            j = j - k;
+            k = k / 2;
+        }
+        j = j + k;
+    }
+
+    //Loop for each stage
+    for (let stage = 1; stage <= power; stage++) {  
+        let spectraSize = Math.pow(2, stage);      
+        let halfSpectra = spectraSize / 2;
+        let ur = 1;
+        let ui = 0;
+        //calculate sine and cosine values
+        let sr = Math.cos(Math.PI / halfSpectra);
+        let si = Math.sin(Math.PI / halfSpectra);
+
+        //Loop for each Sub-DTF
+        for (j = 1; j <= halfSpectra; j++) {
+            //Loop for each Butterfly
+            for (let i = j - 1; i < signalLength; i += spectraSize) {
+                let ip = ReX._toDataIndex(makeFFTIndex(i + halfSpectra, dimIndex, isCol, 0));
+                let ti = ReX._toDataIndex(makeFFTIndex(i, dimIndex, isCol, 0));
+                //Butterfly calculation for each channel's signal
+                for (c = 0; c < chans; c++) {
+                    tempR = ReX.getAtDI(ip) * ur - ImX.getAtDI(ip) * ui;
+                    tempI = ReX.getAtDI(ip) * ui + ImX.getAtDI(ip) * ur;
+                    ReX.setAtDI(ip, ReX.getAtDI(ti) - tempR);
+                    ImX.setAtDI(ip, ImX.getAtDI(ti) - tempI);
+                    ReX.setAtDI(ti, ReX.getAtDI(ti) + tempR);
+                    ImX.setAtDI(ti, ImX.getAtDI(ti) + tempI);
+                    ip = ReX._incrementDataIndex(ip, 1, 2);
+                    ti = ReX._incrementDataIndex(ti, 1, 2);
+                }
+            }
+            tempR = ur;
+            ur = tempR * sr - ui * si;
+            ui = tempR * si + ui * sr;
+        }
+    }
+    return complexImage;
+}
+
+function chirpZTransformImage(complexImage, dimIndex, isCol=false, chans=3) {
+    let ReX = complexImage.real,
+        ImX = complexImage.imag;
+        signalLength = isCol ? complexImage.height() : complexImage.width(),
+        powerOf2 = 1;  
+    while (powerOf2 < signalLength * 2 + 1) powerOf2 *= 2;
+    //Perform the following Z-Transform for all channels
+    for (let c of chans) {
+        let tcos = [];
+        let tsin = [];
+        let ReA = zeros([powerOf2], true);
+        let ImA = zeros([powerOf2], true);
+        let ReB = zeros([powerOf2], true);
+        let ImB = zeros([powerOf2], true);
+
+        for (let si = 0; si < signalLength; si++) {
+            let j = si * si % (signalLength * 2),
+                ti = ReX._toDataIndex(makeFFTIndex(si, dimIndex, isCol, c));
+            tcos[si] = Math.cos(Math.PI * j / signalLength);
+            tsin[si] = Math.sin(Math.PI * j / signalLength);
+            ReA[si] = ReX.getAtDI(ti) * tcos[si] + ImX.getAtDI(ti) * tsin[si];
+            ImA[si] = ImX.getAtDI(ti) * tcos[si] - ReX.getAtDI(ti) * tsin[si];
+        }
+        //Pad with zeros so that length is radix-2 number M
+        for (let sigPadIndex = signalLength; sigPadIndex < powerOf2; sigPadIndex++) {
+            ReA[sigPadIndex] = 0;
+            ImA[sigPadIndex] = 0;
+        }
+
+        ReB[0] = tcos[0];
+        ImB[0] = tsin[0];
+        for (let si = 1; si < signalLength; si++) {
+            ReB[si] = tcos[si];
+            ImB[si] = tsin[si];
+            ReB[powerOf2 - si] = tcos[si];
+            ImB[powerOf2 - si] = tsin[si];
+        }
+
+        convolveComplex(ReA, ImA, ReB, ImB);
+        for (let si = 0; si < signalLength; si++) {
+            let ti = ReX._toDataIndex(makeFFTIndex(si, dimIndex, isCol, c));
+            ReX.setAtDI(ti, ReA[i] * tcos[i] + ImA[i] * tsin[i]);
+            ImX.setAtDI(ti, ImA[i] * tcos[i] - ReA[i] * tsin[i]);
+        }
+    }
+    return complexImage;
+}
+
+function FFT1DImage(complexImage, dimIndex, isCol=false, chans) {
+    let signalLength = isCol ? complexImage.height() : complexImage.width();
+    if (signalLength === 0) return;
+    //If Signal length is a power of two perform Radix-2 FFT
+    if (isPowerOfTwo(signalLength)) {
+        radix2FFTImage(complexImage, dimIndex, isCol, chans); 
+    } else {
+        //If Signal length is arbitrary or prime, perform chirp-z transfrom
+        chirpZTransformImage(complexImage, dimIndex, isCol, chans);
+    }
+    return complexImage;
+}
+
+function FFT2DFromComplexImage(complexImage, chans) {
+    //Take FFT of rows and store in real and imaginary images.
+    for (let row = 0; row < complexImage.height(); row++) {
+        FFT1DImage(complexImage, row, false, chans);
+    }
+    //Take FFT of each column
+    for (let col = 0; col < complexImage.width(); col++) {
+        FFT1DImage(complexImage, col, true, chans);
+    }
+    return complexImage;
+}
+
+/** Calculates Fourier Transform of a 2D image represented as one flat multi-channel array.
+ * @param   {Object}  rgbImage Instance of the RGBImage class.
+ * @param   {Int}     chans   the number of color channels to perform the transform on.
+ * @param   {Boolean} inPlace If true will alter the original image object.
+ * @returns {Object} ComplexSignal     A complex representation of the image in the frequency domain.
+ * @returns {Array}  ComplexSignal.real The real component of the signal in the freq domain.
+ * @returns {Array}  ComplexSignal.imag The imaginary component of the signal in the freq domain.
+**/
+function FFT2DFromRealImage(rgbImage, chans, inPlace=true) {
+    let height = rgbImage.shape[0];
+    let width = rgbImage.shape[1];
+
+    let ReX = inPlace ? 
+        rgbImage : 
+        new RGBImage(rgbimage.data.slice(0), width, height);
+    let ImX = new Tensor(rgbImage.shape, zeros(rgbImage.shape, true));
+    let complexImage = {
+        real : ReX,
+        imag : ImX,
+        height : () => {
+            ReX.shape[0];
+        },
+        width : () => {
+            ReX.shape[1];
+        }
+    }
+    return FFT2DFromComplexImage(complexImage, chans);
+}
+
+/** Inverse Fourier Transform of a complex 2D image in the frequency domain epresented as two flat multi-channel array components
+ * @param   {Object}  complexImage  instantiation of complex image class with real and imaginary components in the frequency domain.
+ * @param   {Int}     chans   the number of color channels to perform the inverse FFT on.
+ * @returns {Object} ComplexSignal     References to the component arrays that have been altered in place.
+ * @returns {Array}  ComplexSignal.real The real component of the signal in the time domain.
+ * @returns {Array}  ComplexSignal.imag The imaginary component of the signal in the time domain.
+**/
+function inverseFFT2DImage(complexImage, chans) {
+    let normal = complexImage.height() * complexImage.width();
+
+    complexImage.imag.forEachVal([[],[],[0,[],chans]], (amp, dataIndex) => {
+        complexImage.imag.setAtDI(dataIndex, amp * -1);
+    });
+
+    FFT2DFromComplexImage(complexImage, chans);
+
+    //Normalize each value by dividing by pixelWidth * pixelHeight
+    complexImage.real.forEachVal([[],[],[0,[],chans]], (value, dataIndex) => {
+        complexImage.real.setAtDI(dataIndex, value / normal);
+    });
+    complexImage.imag.forEachVal([[],[],[0,[],chans]], (value, dataIndex) => {
+        complexImage.imag.setAtDI(dataIndex, -1 * value / normal);
+    });
+
+    return { complexImage };
+}
+
+function multiplyFreqImage(complexX, copmlexH, chans, inPlace=false) {
+    if (!max) max = ReX.length;
+    let ReY = inPlace ? ReX : [],
+        ImY = inPlace ? ImX : [];
+
+    if (inPlace) {
+        let temp;
+        for (let i = min; i < max; i++) {
+            temp = ReX[i] * ReH[i] - ImX[i] * ImH[i]; 
+            ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+            ReY[i] = temp;
+        }
+    } else {
+        for (let i = min; i < max; i++) {
+            ReY[i] = ReX[i] * ReH[i] - ImX[i] * ImH[i];
+            ImY[i] = ImX[i] * ReH[i] + ReX[i] * ImH[i];
+        }
+    }
+    return { "ReX" : ReY, "ImX" : ImY }
+}
+
+function FFTConvolution(img, psf) {
+    let FFTHeight = nextPowerOf2(img.height() * 2 - 1);
+    let FFTWidth = nextPowerOf2(img.width() * 2 - 1);
+
+    let imgPaddingAfter = [
+        Math.floor((FFTHeight - img.height()) / 2),
+        Math.floor((FFTWidth - img.width()) / 2)
+    ];
+    let imgPaddingBefore = [
+        Math.ceil((FFTHeight - img.height()) / 2),
+        Math.ceil((FFTWIdht - img.width()) / 2)
+    ];
+    let psfPaddingAfter = [
+        Math.floor((FFTHeight - psf.shape[0]) / 2),
+        Math.floor((FFTWidth - psf.shape[1]) / 2)
+    ];
+    let psfPaddingBefore = [
+        Math.ceil((FFTHeight - psf.shape[0]) / 2),
+        Math.ceil((FFTWidth - psf.shape[1]) / 2)
+    ];
+    img.pad(imgPaddingBefore, imgPaddingAfter, true, 'constant', 0);
+    psf.pad(psfPaddingBefore, psfPaddingAfter, true, 'constant', 0);
+
+    let complexFreqImg = FFT2DFromRealImage(img, 3, true);
+    let complexFreqPSF = FFT2DFromRealImage(psf, 1, true);
+
+    let convolvedFreqImg = multiplyFreqImage(complexFreqImg, complexFreqPSF, 3, inPlace);
+    return  depadRealImage( inverseFFT2DImage(convolvedFreqImg, 3).real , width, 3, min);
+}
+
+// function convolveRealImage(img, psf, edge="mirror") {
+//     let output = [];
+//         finalHeight = img.height() + psf.rows() - 1,
+//         finalWidth = img.width() + psf.cols() - 1,
+//         leftRadius = Math.ceil(psf.cols() / 2) - 1, //5 = 2 4 = 1
+//         rightRadius = psf.cols() - leftRadius - 1, //5 = 2; 4 = 2;
+//         topRadius = Math.ceil(psf.rows() / 2) - 1,
+//         bottomRadius = psf.rows() - topRadius - 1;
+//         // cntrRI= leftRadius,
+//         // cntrCI = rightRadius,
+//         let currIndex = 0;
+//         let rightSum = 0;
+//         let topSum = 0;
+//         let sum = 0;
+//         let subCols = 0;
+//         let subRows = 0;
+//         let totalSub = 0;
+//     for (let row = 0; row < imgHeight; row++) {
+//         for (let col = 0; col < imgWidth; col++) {
+            
+
+//             //calculate submerged columns and rows;
+//             if (col < leftRadius) subCols = leftRadius - col;
+//             else if (imgWidth - col <= rightRadius) subCols = rightRadius - (imgWidth - col - 1);
+//             if (row < topRadius) subRows = topRadius - row;
+//             else if (imgHeight - row <= bottomRadius) subRows = bottomRadius - (imgHeight - row - 1);
+            
+//             if (!subRows || !subCols) {
+//                 switch(edge) {
+//                     case "mirror" : 
+//                         wrapRInd = imgHeight - r - 1;
+//                         break;
+//                     case "pad" : 
+//                         val = 0;
+//                         break;
+//                     case "correct" :
+//                         //divide by immersed pixels;
+//                         break;
+//                 }
+//             } else {
+//                 for (let pr = -topRadius; pr <= bottomRadius; pr++) {
+//                     for (let pc = -leftRadius; pc <= rightRadius; pc++) {
+//                         //sum += img[((r * imgWidth) + c) * chans] * 
+                        
+//                     }
+    
+//                 }
+//             }
+//         }
+//     }
+
+//     for (let r = -topRadius; r < imgHeight - topRadius; r++) {
+//         for (let c = -leftRadius; c < imgWidth - leftRadius; c++) {
+//             let sum = 0,
+//                 subC = 0,
+//                 subR = 0,
+//                 totalSub;
+
+//             //calculate submerged columns and rows;
+//             if (c < 0) subC = 0 - c;
+//             else if (c + psfWidth - 1 >= imgWidth) subC = psfWidth - imgWidth + c;
+//             if (r < 0) subR = 0 - r;
+//             else if (r + psfHeight - 1 >= imgHeight) subR = psfHeight - imgHeight + r;
+            
+//             if (!subR || !subC) {
+//                 switch(edge) {
+//                     case "mirror" : 
+//                         wrapRInd = imgHeight - r - 1;
+//                         break;
+//                     case "pad" : 
+//                         val = 0;
+//                         break;
+//                     case "correct" :
+//                         //divide by immersed pixels;
+//                         break;
+//                 }
+//             } else {
+//                 for (let pr = 0; pr < psfHeight; pr++) {
+//                     for (let pc = 0; pc < psfWidth; pc++) {
+//                         //sum += psf[]
+                        
+//                     }
+//                 }
+//             }
+//             //output[row col] = 
+//         }
+//     }
+// }
+module.exports = {
+    equalizeImgLight,
+    FFT2DFromRealImage,
+    inverseFFT2DImage,
+    FFT1DImage,
+}
+},{"../colorspace/cie.js":1,"../colorspace/rgb.js":2,"../colorspace/srgb.js":3,"../flatsignal/signalprocessing.js":5,"../stat/histogram.js":7,"../tensor/tensor.js":9,"../utility/array_util.js":12,"../utility/num_util.js":14,"../utility/type_util.js":16,"./rgbimage.js":11}],11:[function(require,module,exports){
+const { relativeLuminence, linearize8Bit } = require('./../colorspace/srgb.js');
+const { lightness } = require('./../colorspace/cie.js');
+const { Tensor } = require('./../tensor/tensor.js');
+
+const RGBImage = (function() {
+    function RGBImage(img, width, a) {
+        this.colorIdx = 0;
+        this.width = width;
+        this.height = img.length / width / (a ? 4 : 3);
+        Tensor.call(this, [this.height, width, a ? 4 : 3], img);
+    }
+    RGBImage.prototype = Object.create(Tensor.prototype);
+    RGBImage.prototype.constructor = RGBImage;
+    const $RGBI = RGBImage.prototype;
+
+    $RGBI.tupleSize = function() {
+        return this.shape[3];
+    }
+    $RGBI.imageSize = function() {
+        return this.width * this.height;
+    }
+    $RGBI.forEachPixel = function(callbackFn, a=false) {
+        let pixel = [];
+        let chanIndex = 0;
+        let totalChans = this.a && a ? 4 : 3;
+        let range = [[],[],[0, [], totalChans - 1]];
+
+        this.forEachVal(range, (value, dataIndex) => {
+            pixel[chanIndex++] = value;
+            if (chanIndex === totalChans) {
+                callbackFn(pixel, dataIndex - chanIndex + 1); //Helpful to pass along the tensorIndex?
+                pixel = [];
+                chanIndex = 0;
+            }
+        });
+    }
+
+    $RGBI.toPixels = function(a=false) {
+        let pixelList = [];
+        let endIndex = 0;
+        this.forEachPixel((pixel) => {
+            pixelList[endIndex++] = pixel;
+        }, a);
+
+        return pixelList;
+    }
+
+    $RGBI.toLightness = function(range=255) {
+        let lightnessList = [];
+        let endIndex = 0;
+        this.forEachPixel((pixel) => {
+            lightnessList[endIndex++] = Math.round(
+                (lightness(relativeLuminence(linearize8Bit(pixel)))) / 100 * range 
+            )
+        }, false);
+        return lightnessList;
+    }
+
+    $RGBI.lightnessDataIndices = function(range=255) {
+        let lightnessList = this.toLightness(range);
+        let lightDataIndices = [];
+        for (let m = 0; m < lightnessList.length; m++) {
+            if (!lightDataIndices[lightnessList[m]]) {
+                lightDataIndices[lightnessList[m]] = [];
+            }
+            lightDataIndices[lightnessList[m]].push(m * this.tupleSize());
+        }
+        return lightDataIndices;
+    }
+
+    $RGBI.pixelAt = function(rowIndex, colIndex) {
+        return this.getExplicit([rowIndex, colIndex]);
+    }
+    $RGBI.redChannelAt = function(rowIndex, colIndex) {
+        return this.getExplicit([rowIndex, colIndex, 0]);
+    }
+    $RGBI.greenChannelAt = function(rowIndex, colIndex) {
+        return this.getExplicit([rowIndex, colIndex, 1]);
+    }
+    $RGBI.blueChannelAt = function(rowIndex, colIndex) {
+        return this.getExplicit([rowIndex, colIndex, 2]);
+    }
+
+    $RGBI.getRedChannel = function(flat=true) {
+        return this.get([[],[],0]);
+    }
+    $RGBI.getGreenChannel = function(flat=true) {
+        return this.get([[],[],1]);
+    }
+    $RGBI.getBlueChannel = function(flat=true) {
+        return this.get([[],[],2]);
+    }
+    $RGBI.getAlphaChannel = function(flat=true) {
+        if (this.tupleSize() < 4) return null;
+        return this.get([[],[],3]);     
+    }
+
+    return RGBImage;
+})();
+
+// const ComplexImage = (function() {
+//     function ComplexImage(ReX, ImX=null, width, a) {
+//         this.ReX = ReX;
+//         this.ImX = ImX ? ImX : zeros([ReX.shape])
+//     }
+// })
+module.exports = {
+    RGBImage
+}
+},{"./../colorspace/cie.js":1,"./../colorspace/srgb.js":3,"./../tensor/tensor.js":9}],12:[function(require,module,exports){
 function isShape(shape) {
     if (!Array.isArray(shape)) return false;
     if (shape.length > 1) {
@@ -2615,6 +2415,204 @@ module.exports = {
     zeros,
     ones,
     identity,
+}
+},{}],13:[function(require,module,exports){
+//Calculates and returns the magnitude (spatial length) of a vector.
+const mag = vector => Math.sqrt(vector.reduce((acc, curr) => acc + (curr * curr), 0));
+//A and B are both N length vectors. Returns the angle in Radians between them.
+const angle = (A, B) => Math.acos(dot(A, B) / (mag(A) * mag(B)));
+//A and B are both vectors of length 3. Returns vector C of length 3 that is orthogonal to A and B.
+const cross = (A, B) => [
+    (A[1] * B[2]) - (A[2] * B[1]),
+    (A[2] * B[0]) - (A[0] * B[2]),
+    (A[0] * B[1]) - (A[1] * B[0])];
+//Calculates and returns the inverse of a square matrix. If matrix is not valid or not square, returns false.
+function invert(square) {
+    let sDim = dim(square);
+    if (!(sDim && sDim.rows === sDim.cols)) {
+        throw new err("Given Matrix must be square.")
+    } 
+    
+    let I = [];
+    let C = [];
+    for(let i = 0; i < sDim.rows; i++) {
+        I.push([]);
+        C.push([]);
+        for (let m = 0; m < sDim.rows; m++) {
+            I[i][m] = i === m ? 1 : 0;
+            C[i][m] = square[i][m];
+        }
+    }
+
+    let diag;
+    for (let r = 0; r < sDim.rows; r++) {
+        diag = C[r][r];
+        if (diag === 0) {
+            for (let s = r + 1; s < sDim.rows; s++) {
+                if (C[s][r] !== 0) {
+                    let temp = C[r];
+                    C[r] = C[s];
+                    C[s] = temp;
+                    temp = I[r];
+                    I[r] = I[s];
+                    I[s] = temp;
+                }
+            }
+            diag = C[r][r];
+            if (diag === 0) {
+                return false;
+            }
+        }
+
+        for (let i = 0; i < sDim.rows; i++) {
+            C[r][i] = C[r][i] / diag;
+            I[r][i] = I[r][i] / diag;
+        }
+        for (let g = 0; g < sDim.rows; g++) {
+            if (g === r) {
+                continue;
+            }
+
+            let h = C[g][r];
+
+            for (let j = 0; j < sDim.rows; j++) {
+                C[g][j] -= h * C[r][j];
+                I[g][j] -= h * I[r][j];
+            }
+        }
+    }
+
+    return I;
+}
+
+//Returns the rows and columns of a Matrix represented as a nested array.
+//If matrix is not well-formed, returns null.
+function dim(matrix) {
+    if (Array.isArray(matrix) && matrix.length > 0) {
+        let rows = matrix.length;
+        if (matrix[0] === undefined || matrix[0] === null) {
+            return null;
+        } else if (!Array.isArray(matrix[0])) {
+            return { "rows": rows, "cols" : 1 }
+        }
+        let cols = matrix[0].length;
+        for (let r = 0; r < matrix.length; r++) {
+            if (Array.isArray(matrix[r])) {
+                if (matrix[r].length !== cols) {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        }
+        return {rows, cols}
+    }
+    return null;
+}
+
+
+function determinant(matrix) {
+    let dimM = dim(matrix);
+    if (dimM && dimM.rows !== dimM.cols) {
+        return null;
+    }
+    let det = null;
+
+    if (dimM.rows === 2) {
+        det = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0];
+    } else {
+        det = 0;
+        let even = false;
+        for(let c = 0; c < dimM.rows; c++) {
+            let scalar = matrix[0][c];
+            let subMatrix = [];
+            for (let r = 1; r < dimM.rows; r++) {
+                let smRow = [];
+                for (let col = 0; col < dimM.rows; col++) {
+                    if (col !== c) {
+                        smRow.push(matrix[r][col]);
+                    }
+                }
+                subMatrix.push(smRow);
+            }
+            
+            let subDet = determinant(subMatrix);
+            if (even) {
+                det -= scalar * subDet;
+            } else {
+                det += scalar * subDet;
+            }
+            even = !even;
+        }
+    }
+    return det;
+}
+
+//Given two vectors of length n, returns the dot-product of their entries
+function dot(A, B) {
+    if (!(A && B) || A.length === 0 || A.length !== B.length) {
+        throw new Error("Vectors A and B must be Arrays of the same length.");
+    }
+    let product = 0;
+    for (let i = 0; i < A.length; i++) {
+        product += A[i] * B[i];
+    }
+    return product;
+}
+
+function multiply(A, B) {
+    let dimA = dim(A);
+    let dimB = dim(B);
+    if (!(dimA && dimB)) {
+        console.log(dimA);
+        console.log(dimB);
+        throw new Error("A and B must be valid matrices.");
+
+    }
+    if (dimA.cols !== dimB.rows) {
+        throw new Error(
+            "The column count of Matrix A (" + dimA.cols +
+            ") and the row count of B (" + dimB.rows + ") must match."
+        );
+    }
+
+    let C = []; 
+    //Set up C to be a dimA.rows x dimB.cols matrix
+    //only perform if product is not a vector
+    if (dimB.cols > 1) {
+        for (let s = 0; s < dimA.rows; s++) {
+            C.push([]);
+        }
+    }
+
+    for (let i = 0; i < dimA.rows; i++) {
+        for (let j = 0; j < dimB.cols; j++) {
+            let sum = 0;
+            for (let k = 0; k < dimA.cols; k++) {
+                let av, bv;
+                av = dimA.cols === 1 ? A[i] : A[i][k];
+                bv = dimB.cols === 1 ? B[k] : B[k][j];
+                
+                sum = sum + av * bv;
+            }
+            if (dimB.cols > 1) {
+                C[i][j] = sum;
+            } else {
+                C[i] = sum;
+            }          
+        }
+    }
+    return C;
+}
+
+module.exports = {
+    dim,
+    invert,
+    multiply,
+    dot,
+    mag,
+    angle,
+    cross
 }
 },{}],14:[function(require,module,exports){
 const { isHex } = require('./type_util.js');
@@ -2830,7 +2828,7 @@ module.exports = {
     trimRangedIndex,
     reducedShape,
 }
-},{"./array_util.js":13}],16:[function(require,module,exports){
+},{"./array_util.js":12}],16:[function(require,module,exports){
 
 function isString(value) {
     return (typeof value === 'string' || value instanceof String);

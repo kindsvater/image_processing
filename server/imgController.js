@@ -1,11 +1,11 @@
-const { RGBA } = require("../src/rgb.js");
-const { decodeGamma8Bit, relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('../src/srgb.js');
-const { lightnessToASCII, lightnessToGrayscale, rgbaGradient } = require("../src/colorpropconvert.js");
-const { lightness, XYZtoLAB, LABtoXYZ, illuminant } = require("../src/cie.js");
-const { loadChanTreeFile, randomColorFromChanTreeBuff } = require("../src/writeBrightnessFiles.js");
-const { histogram } = require("../src/imageProcessing.js");
-const { RGBImage } = require("../src/rgbimage.js");
-const treeBuffPath = '255buff/ct' //'cieBuff/ct'
+const { RGBA } = require("../src/colorspace/rgb.js");
+const { decodeGamma8Bit, relativeLuminence, linearize8Bit, sRGBtoXYZ, XYZtosRGB } = require('../src/colorspace/srgb.js');
+const { lightnessToASCII, lightnessToGrayscale, rgbaGradient } = require("../src/colorspace/colorpropconvert.js");
+const { lightness, XYZtoLAB, LABtoXYZ, illuminant } = require("../src/colorspace/cie.js");
+const { loadChanTreeFile, randomColorFromChanTreeBuff } = require("../rgblightness/randcoloroflightness.js");
+const { histogram } = require("../src/flatsignal/imageProcessing.js");
+const { RGBImage } = require("../src/tensorsignal/rgbimage.js");
+const treeBuffPath = './rgblightness/255buff/ct' //'cieBuff/ct'
 
 function imgToRGBA(rawImgData) {
     //check if raw stream is an array and if it is divisible by 4
