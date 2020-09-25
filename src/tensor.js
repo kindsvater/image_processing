@@ -1,15 +1,24 @@
 'use strict';
-const { sizeFrom, stridesFrom, isShape, toNestedArray, initArray } = require('./utility/array_util.js');
+const { sizeFrom, stridesFrom, isShape, toNestedArray } = require('./utility/array_util.js');
 const { reduceRangedIndex, reducedShape, trimRangedIndex, isRangedIndex } = require('./utility/rangedindex_util.js');
-const PadHelpers = require('./tensorpad.js');
 
 const Tensor = (function() {
     function Tensor(shape, data) {
         if(!isShape(shape)) {
-            throw new TypeError('Shape is not well-formed. Shape should be an array of integers');
+            throw new TypeError(
+                `Provided shape [${shape}] is not well-formed. \n` + 
+                `Shape must be an array of positive integers.`
+            );
+        }
+        let size = sizeFrom(shape);
+        if (size !== data.length) {
+            throw new Error(
+                `Provided Shape [${shape}] does not describe data ` +
+                `of size ${data.length}.\nShape describes data of size ${size}.`
+            );
         }
         this.shape = shape;
-        this.size = sizeFrom(shape);
+        this.size = size;
         this.strides = stridesFrom(shape);
         this.data = data;
         this.rank = shape.length;
@@ -24,7 +33,9 @@ const Tensor = (function() {
         for (let i = 0; i < dims; i++) {
             dataIndex += this.strides[i] * tensorIndex[i];
         }
-        if (dataIndex >= this.size || dataIndex < 0) throw new Error('Index out of range');
+        if (dataIndex >= this.size || dataIndex < 0) throw new Error(
+            `Index ${tensorIndex}, is out of range of Tensor with shape [${this.shape}]`
+        );
         return dataIndex;
     }
     
@@ -68,6 +79,15 @@ const Tensor = (function() {
                 }
             }
         }
+    }
+
+    $T.isValidIndex = function(dataIndex) {
+        for (let i = 0; i < dataIndex.length; i++) {
+            if (dataIndex[i] < 0 || dataIndex[i] >= this.shape[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     $T.forEachExplicit = function(explicitIndex, callbackFn) {
@@ -126,7 +146,8 @@ const Tensor = (function() {
     }
     
     $T.set = function(rangedIndex, values) {
-        if (!Array.isArray(values)) values = [values]; //If is a single value, wrap in array.
+        //If setting a single value, wrap in array.
+        if (!Array.isArray(values)) values = [values]; 
         let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
         let requiredInputLength;
         let valIndex = 0;
@@ -140,7 +161,8 @@ const Tensor = (function() {
 
         if (values.length !== requiredInputLength) {
             throw new Error(
-                `Number of values, ${values.length}, does not meet the required amount, ${requiredInputLength}`
+                `Number of values, ${values.length}, ` + 
+                `does not meet the number of indices set: ${requiredInputLength}`
             );
         }
         
@@ -148,170 +170,47 @@ const Tensor = (function() {
             this.data[i] = values[valIndex];
             valIndex++;
         });
+        return this;
     }
 
     $T.setAtDI = function(dataIndex, value) {
         this.data[dataIndex] = value;
+        return this;
     }
 
-    $T.isValidIndex = function(dataIndex) {
-        for (let i = 0; i < dataIndex.length; i++) {
-            if (dataIndex[i] < 0 || dataIndex[i] >= this.shape[i]) {
-                return false;
+    $T.update = function(shape, data=null) {
+        if(!isShape(shape)) {
+            throw new TypeError(
+                `Provided shape [${shape}] is not well-formed. \n` + 
+                `Shape must be an array of positive integers.`
+            );
+        }
+        let newStrides = stridesFrom(shape);
+        let newSize = sizeFrom(shape);
+
+        if (data) {
+            if (newSize !== data.length) {
+                throw new Error(
+                    `Provided Shape [${shape}] does not describe new data ` +
+                    `of size ${data.length}.` + 
+                    `\nShape describes data of size ${newSize}.`
+                );
+            }
+            this.data = data;       
+        } else {
+            if (newSize !== this.data.length) {
+                throw new Error(
+                    `Provided Shape [${shape}] does not describe Tensor data. ` +
+                    `\nShape describes data of ${newSize}; ` +
+                    `Current Tensor data is of size ${this.data.length}.`
+                );
             }
         }
-        return true;
-    }
-    // $T.__padHelper = function(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padVals) {
-    //     for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
-    //         padded[pInd++] = padVals[0];
-    //     }
-        
-    //     //Base Case: If this is the final dimension of original shape, add the original data
-    //     if (oShape.length === 1) {  
-    //         for (let c = 0; c < oShape[0]; c++) {        
-    //             if (padBefore.length > 1) {
-    //                 for (let b = 0; b < padBefore[1]; b++) {
-    //                     padded[pInd++] = padVals[0];
-    //                 }
-    //             }
-    //             padded[pInd++] = orig[oIndex++];
-    //             if (padAfter.length > 1) {
-    //                 for (let a = 0; a < padAfter[1]; a++) {
-    //                     padded[pInd++] = padVals[0];
-    //                 }
-    //             }
-    //         }
-    //     } else {
-    //         for (let c = 0; c < oShape[0]; c++) {
-    //             let indices = this.__padHelper(
-    //                 orig, oShape.slice(1), oIndex,
-    //                 padded, pStrides.slice(1), pInd,
-    //                 padAfter.slice(1), padBefore.slice(1), padVals.slice(1)
-    //             );
-    //             oIndex = indices[0];
-    //             pInd = indices[1];
-    //         }
-    //     }
-
-    //     for (let a = 0; a < padAfter[0] * pStrides[0]; a++) {
-    //         padded[pInd++] = padVals[0];
-    //     }
-    //     return [oIndex, pInd];
-    // }
-
-    // $T.pad = function(padAfter, padBefore, inplace=true) {
-    //     if (padAfter.length !== padBefore.length) {
-    //         throw new Error(`List of padding before each dimension ${ padBefore.length }
-    //          and list of padding after each dimension ${ padAfter.length } lengths do not match`);
-    //     }
-    //     let newRank = padAfter.length > this.rank ? padAfter.length : this.rank,
-    //         newShape = [],
-    //         newData = [],
-    //         newStrides;
-
-    //     for (let dim = 0; dim < newRank; dim++) {
-    //         let before = dim >= padBefore ? 0 : padBefore[dim],
-    //             after = dim >= padAfter ? 0 : padAfter[dim],
-    //             curr = dim >= this.rank ? 1 : this.shape[dim];
-    //         newShape[dim] = curr + before + after;
-    //     }
-    //     newStrides = stridesFrom(newShape);
-
-    //     this.__padHelper(this.data, this.shape, 0, newData, newStrides, 0, padAfter, padBefore, padVals);
-        
-    //     if (inplace) {
-    //         this.data = newData;
-    //         this.size = newData.length;
-    //         this.shape = newShape;
-    //         this.strides = newStrides;
-    //         this.rank = newRank;
-    //     }
-
-    //     return newData;
-    // }
-
-
-    // function getPaddingValues(padAfter, padBefore, padType, constant) {
-    //     let values = [];
-
-    //     switch (padType) {
-    //         case(0) :
-    //             values = initArray([])
-    //     }
-    // }
-
-    // $T.__padHelper = function(orig, oShape, oIndex, padded, pStrides, pInd, padAfter, padBefore, padType, constant) {
-    //     for (let b = 0; b < padBefore[0] * pStrides[0]; b++) {
-    //         padded[pInd++] = padVals[0];
-    //     }
-        
-    //     //Base Case: If this is the final dimension of original shape, add the original data
-    //     if (oShape.length === 1) {  
-    //         for (let c = 0; c < oShape[0]; c++) {        
-    //             if (padBefore.length > 1) {
-    //                 for (let b = 0; b < padBefore[1]; b++) {
-    //                     padded[pInd++] = padVals[0];
-    //                 }
-    //             }
-    //             padded[pInd++] = orig[oIndex++];
-    //             if (padAfter.length > 1) {
-    //                 for (let a = 0; a < padAfter[1]; a++) {
-    //                     padded[pInd++] = padVals[0];
-    //                 }
-    //             }
-    //         }
-    //     } else {
-    //         for (let c = 0; c < oShape[0]; c++) {
-    //             let indices = this.__padHelper(
-    //                 orig, oShape.slice(1), oIndex,
-    //                 padded, pStrides.slice(1), pInd,
-    //                 padAfter.slice(1), padBefore.slice(1), padVals.slice(1)
-    //             );
-    //             oIndex = indices[0];
-    //             pInd = indices[1];
-    //         }
-    //     }
-
-    //     for (let a = 0; a < padAfter[0] * pStrides[0]; a++) {
-    //         padded[pInd++] = padVals[0];
-    //     }
-    //     return [oIndex, pInd];
-    // }
-
-    $T.pad = function(padBefore, padAfter, inplace=true, padType='constant', constant=0) {
-        let padFunction = PadHelpers[padType];
-        if (!padFunction) {
-            throw new Error(`Padding Type ${padType} is not a valid type of padding Tensors.`);
-        }
-        let newRank = this.rank;
-        if (padAfter.length > newRank) newRank = padAfter.length;
-        if (padBefore.length > newRank) newRank = padBefore.length;
-        let newShape = [];
-        let newData = [];
-        let newStrides;
-        let padValues;
-
-        for (let dim = 0; dim < newRank; dim++) {
-            let before = padBefore[dim] ? padBefore[dim] : 0,
-                after = padAfter[dim] ? padAfter[dim] : 0,
-                curr = this.shape[dim] ? this.shape[dim] : 1;
-            newShape[dim] = curr + before + after;
-        }
-
-        newStrides = stridesFrom(newShape);
-
-        padFunction(this, [], 0, newData, newShape, newStrides, padAfter, padBefore, constant);
-        
-        if (inplace) {
-            this.data = newData;
-            this.size = newData.length;
-            this.shape = newShape;
-            this.strides = newStrides;
-            this.rank = newRank;
-        }
-
-        return newData;
+        this.size = newSize;
+        this.shape = shape;
+        this.strides = newStrides;
+        this.rank = shape.length;
+        return this;
     }
 
     $T.toNestedArray = function() {

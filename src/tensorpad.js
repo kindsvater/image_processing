@@ -1,221 +1,59 @@
-function constant(tt, currIndex, dim, values, shape, strides, padAfter, padBefore, constVal) {
-    console.log(currIndex);
-    let before = padBefore[dim] ? padBefore[dim] : 0;
-    let after = padAfter[dim] ? padAfter[dim] : 0;
-    let signalLength = tt.shape[dim];
-    let slmin1 = signalLength - 1;
+const PaddingTypes = require('./paddingtypes.js');
 
-    for (let b = before; b > 0; b--) {
-        currIndex[dim] = -1;
-
-        if (dim + 1 === tt.rank) {
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(constVal);
-            }
-        } else {
-            constant(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore, constVal);
-        }
+function pad(tensor, padBefore, padAfter, inplace=true, padType='constant', constant=0) {
+    let padFunction = PaddingTypes[padType];
+    if (!padFunction) {
+        throw new Error(
+            `Provided Padding Type ${padType} is not a valid tensor padding method. Try ${PaddingTypes.keys()}`
+        );
     }
+    let newRank = tensor.rank;
+    if (padAfter.length > newRank) newRank = padAfter.length;
+    if (padBefore.length > newRank) newRank = padBefore.length;
+    let newShape = [];
+    let newData = [];
+    let newStrides;
+    let padValues;
 
-    for (let d = 0; d < signalLength; d++) {
-        currIndex[dim] = d;
-        if (currIndex.length === tt.rank) {
-            console.log(currIndex);
-            let val = tt.isValidIndex(currIndex) ? 
-                tt.getExplicit(currIndex) :
-                constVal;
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            constant(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore, constVal);
-        }
+    for (let dim = 0; dim < newRank; dim++) {
+        let before = padBefore[dim] ? padBefore[dim] : 0,
+            after = padAfter[dim] ? padAfter[dim] : 0,
+            curr = tensor.shape[dim] ? tensor.shape[dim] : 1;
+        newShape[dim] = curr + before + after;
     }
+    newStrides = stridesFrom(newShape);
+    padFunction(tensor, [], 0, newData, newShape, newStrides, padAfter, padBefore, constant);
     
-    for (let a = 1; a <= after; a++) {
-        currIndex[dim] = -1;
-        if (dim + 1 === tt.rank) {
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(constVal);
-            }
-        } else {
-            constant(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore, constVal);
-        }
+    if (inplace) {
+        //TODO: implement in a method of the Tensor class.
+        tensor.data = newData;
+        tensor.size = newData.length;
+        tensor.shape = newShape;
+        tensor.strides = newStrides;
+        tensor.rank = newRank;
+        return tensor;
     }
-    currIndex.pop();
-    return values;
+    return new Tensor(newShape, newData);
 }
 
-function wrap(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
-    let before = padBefore[dim] ? padBefore[dim] : 0;
-    currIndex[dim] = Math.abs(tt.shape[dim] + (-1 - before % tt.shape[dim])) % tt.shape[dim];
-    for (let s = 0; s < shape[dim]; s++) {
-        currIndex[dim] = (currIndex[dim] + 1) % tt.shape[dim];
-
-        if (dim + 1 === tt.rank) {
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            wrap(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-    currIndex.pop();
-    return values;
-}
-
-function reflect(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
-    console.log(currIndex);
-    let before = padBefore[dim] ? padBefore[dim] : 0;
-    let after = padAfter[dim] ? padAfter[dim] : 0;
-    let signalLength = tt.shape[dim];
-    let slmin1 = signalLength - 1;
-
-    for (let b = before; b > 0; b--) {
-        currIndex[dim] = Math.floor(b / slmin1) % 2 ? slmin1 - (b % slmin1) : b % slmin1;
-
-        if (dim + 1 === tt.rank) {
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            reflect(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
+function depad(tensor, padBefore, padAfter) {
+    let newShape = [];
+    let index = [];
+    for (let i = 0; i < tensor.rank; i++) {
+        let before = padBefore[i] ? padBefore[i] : 0;
+        let after = padAfter[i] ? padAfter[i] : 0;
+        
+        newShape[i] = tensor.shape[i] - before - after;
+        index[i] = [before, [], before + newShape[i]];
     }
 
-    for (let d = 0; d < signalLength; d++) {
-        currIndex[dim] = d;
-        if (dim + 1 === tt.rank) {
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            reflect(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-    
-    for (let a = 1; a <= after; a++) {
-        currIndex[dim] = Math.floor(a / slmin1) % 2 ? a % slmin1 : slmin1 - (a % slmin1) ;
-        if (dim + 1 === tt.rank) {
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            reflect(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
+    let depaddedData = tensor.get(index);
+    let depaddedTensor = new Tensor(newShape, depaddedData);
 
-    currIndex.pop();
-    return values;
-}
-
-function symmetric(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
-    let before = padBefore[dim] ? padBefore[dim] : 0;
-    let after = padAfter[dim] ? padAfter[dim] : 0;
-    let signalLength = tt.shape[dim];
-    let slmin1 = signalLength - 1;
-
-    for (let b = before - 1; b >= 0; b--) {
-        currIndex[dim] = Math.floor(b / signalLength) % 2 ? slmin1 - (b % signalLength) : b % signalLength;
-
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            symmetric(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-
-    for (let d = 0; d < signalLength; d++) {
-        currIndex[dim] = d;
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            symmetric(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-    
-    for (let a = 0; a < after; a++) {
-        currIndex[dim] = Math.floor(a / signalLength) % 2 ? a % signalLength : slmin1 - (a % signalLength) ;
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            symmetric(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-
-    currIndex.pop();
-    return values;
-}
-
-function edge(tt, currIndex, dim, values, shape, strides, padAfter, padBefore) {
-    let before = padBefore[dim] ? padBefore[dim] : 0;
-    let after = padAfter[dim] ? padAfter[dim] : 0;
-    let signalLength = tt.shape[dim];
-    let slmin1 = signalLength - 1;
-
-    currIndex[dim] = 0;
-    for (let b = before - 1; b >= 0; b--) {
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            edge(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-
-    for (let d = 0; d < signalLength; d++) {
-        currIndex[dim] = d;
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            edge(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-    
-    currIndex[dim] = slmin1;
-    for (let a = 0; a < after; a++) {
-        if (dim + 1 === tt.rank) {
-            console.log(currIndex);
-            let val = tt.getExplicit(currIndex);
-            for (let g = 0; g < strides[dim]; g++) {
-                values.push(val);
-            }
-        } else {
-            edge(tt, currIndex, dim + 1, values, shape, strides, padAfter, padBefore);
-        }
-    }
-
-    currIndex.pop();
-    return values;
+    return depaddedTensor;
 }
 
 module.exports = {
-    wrap,
-    reflect,
-    symmetric,
-    edge,
-    constant
+    pad,
+    depad
 }
