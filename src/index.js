@@ -1,14 +1,13 @@
 const { RGBImage } = require('./tensorsignal/rgbimage.js');
-const { equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, padRealImage } = require('./tensorsignal/imageprocessing.js');
-const { RGB, RGBA } = require('./colorspace/rgb.js');
+const { equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, FFTConvolution } = require('./tensorsignal/imageprocessing.js');
 const { relativeLuminence, linearize8Bit } = require('./colorspace/srgb.js');
 const { lightness } = require('./colorspace/cie.js');
 const { zeros } = require('./utility/array_util.js');
-const { round } = require('./utility/num_util.js');
 const { randIntArray, gaussGray } = require('./stat/randomgeneration.js');
-const { extendRealFreqDomain, FFT, inverseFFT } = require('./flatsignal/signalprocessing.js');
 const { impulse, psf } = require('./flatsignal/filter.js');
 const { Tensor } = require('./tensor/tensor.js');
+const { pad, padTo } = require('./tensor/tensorpad.js');
+const { FrequencyDist } = require('./stat/histogram.js');
 // function checkFFT() {
 //     let r = randIntArray(0, 10, 32);
 //     let i = zeros(32);
@@ -21,6 +20,11 @@ const { Tensor } = require('./tensor/tensor.js');
 //     console.log(r);
 //     console.log(i);
 // }
+
+function labelprint(label, data) {
+    console.log(label);
+    console.log(data);
+}
 
 let img = new Image();
 let animate = false;
@@ -38,7 +42,7 @@ img.onload = function() {
     console.log(data);
     let tt = new Tensor([3, 3], data);
     console.log(tt);
-    console.log(tt.pad([4, 4], [4, 4], true, "constant"));
+    console.log(pad(tt, [4, 4], [4, 4], true, "constant"));
     console.log(tt.toNestedArray());
     // console.log("settring [], 0,2 " + tt.set([[], [0, 2]], [9,1,9,1,9,1]));
     // tt.pad([1,1], [1,1], [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
@@ -46,31 +50,35 @@ img.onload = function() {
     // console.log(tt.data);
     // console.log(tt.toNestedArray());
     // console.log(psf.gauss(5, 5, 1));
-    // let canvas = document.getElementById("manip");
-    // let context = canvas.getContext('2d');
-    // let whratio = this.height / this.width;
-    // let cwidth = 500;
-    // let cheight = whratio * cwidth;
-    // canvas.width = cwidth;
-    // canvas.height = cheight;
-    // context.drawImage(this, 0, 0, cwidth, cheight);
-    // let contextData = context.getImageData(0,0, cwidth, cheight);
-    // let rawImgData = contextData.data;
-    // console.log("image pix = " + rawImgData.length);
-    // console.log(rawImgData)
-    // let jkImage = new RGBImage(rawImgData.slice(0,400), 10, true);
-    // console.log(jkImage.toPixels(true));
-    // console.log(jkImage.toNestedArray());
-    // let chanTotal = 0;
-    // jkImage.size;
-    // console.log(`Getting lightness values for ${jkImage.width * jkImage.height} pixels`)
-    // console.log(jkImage.toLightness());
-    // equalizeImgLight(jkImage, 0, 256);
-    // // console.log(read.getRedChannel());
-    // // console.log(read.widthRes);
-    // // console.log(read.heightRes);
-    // // console.log(read.widthRes * read.heightRes * 4);
-    // let LI = jkImage.lightnessDataIndices();
+
+
+    let canvas = document.getElementById("manip");
+    let context = canvas.getContext('2d');
+    let whratio = this.height / this.width;
+    let cwidth = 500;
+    let cheight = Math.floor(whratio * cwidth);
+    canvas.width = cwidth;
+    canvas.height = cheight;
+    labelprint("CANVAS PROPORTIONS: ", `${this.height} * ${this.width}; ${cwidth}, ${cheight}`);
+    context.drawImage(this, 0, 0, cwidth, cheight);
+    let contextData = context.getImageData(0,0, cwidth, cheight);
+    let rawImgData = contextData.data;
+    labelprint("image pix = " + rawImgData.length, rawImgData);
+
+    let jkImage = new RGBImage(rawImgData.slice(0,400), 10, true);
+    labelprint("Image Pixels", jkImage.toPixels(true));
+    console.log(jkImage.toNestedArray());
+    jkImage.size;
+    labelprint(
+        `Getting lightness values for ${jkImage.width * jkImage.height} pixels`,
+        jkImage.toLightness()
+    );
+    equalizeImgLight(jkImage, 0, 256);
+    // console.log(read.getRedChannel());
+    // console.log(read.widthRes);
+    // console.log(read.heightRes);
+    // console.log(read.widthRes * read.heightRes * 4);
+    let LI = jkImage.lightnessDataIndices();
 
     // convertImagetoASCII(rawImgData, cwidth, (textImage) => {
     //     document.getElementById('result').innerHTML = textImage;
@@ -90,8 +98,13 @@ img.onload = function() {
     //     contextData.data.set(rImageData);
     //     context.putImageData(contextData, 0, 0); 
     // })
-    let pw = 3;
-    let grays = gaussGray(pw * pw, 32);
+    // let ww = 500;
+    // let ll = 180;
+
+    let ww = 3;
+    let ll = 3;
+    let cc = 3;
+    let grays = gaussGray(ww * ll, 32);
     
     console.log(grays.length)
     let hist = [];
@@ -107,18 +120,43 @@ img.onload = function() {
         data.push({name: i, value: hist[i] / grays.length})
     }
     displayHistogram('#old', data, "steelblue", 500, 1200)
-    let grayImg = [];
+
+    let grayData = [];
     for (let g = 0; g < grays.length; g++) {
-        grayImg.push(grays[g], grays[g], grays[g], 255);
+        grayData.push(grays[g], grays[g], grays[g], 255);
     }
-    console.log(padRealImage(grays, pw, 4, 6, 6));
-    console.log(grayImg);
-    console.log("Fourier");
-    let { ReX, ImX } = FFT2DFromRealImage(grayImg, pw, 4, true);
-    console.log(ReX);
-    inverseFFT2DImage(ReX, ImX, 4, pw);
-    console.log(ReX)
-    contextData.data.set(new Uint8ClampedArray(grayImg));
+
+    let grayImage = new Tensor([ww, ll, 4], grayData);
+    labelprint("Pre-Fourier Gray Image", grayImage.data);
+    
+    padTo(grayImage, [12, 12], "center", true, "constant", 0);
+    console.log("Paddec Gray Image !!")
+    console.log(grayImage.toNestedArray());
+    let complex = FFT2DFromRealImage(grayImage, 3, true);
+    labelprint("Fourier", complex.real);
+
+    inverseFFT2DImage(complex, 3);
+    labelprint("Inverse Fourier", complex.real);
+    
+    // contextData.data.set(new Uint8ClampedArray(grayImage.data));
+    // labelprint("New Context Data", contextData.data);
+
+    // let filter = new Tensor([cc,cc,1], psf.gauss(cc, cc, 1));
+    // labelprint("Gauss Blur psf", filter.data.slice(0));
+
+    let filter = new Tensor([3, 3, 1], psf.edgeEnhance(1, 1, true));
+    
+    // pad(filter, [3, 3], [3,3], true, "edge");
+    //labelprint("Edge Enhance Filter", filter.data.slice(0));
+
+    // let filter = new Tensor([3, 3, 1], psf.delta());
+    // labelprint("Dirac Idenity PSF", filter.toNestedArray());
+
+   // let currImage = new Tensor([cheight, cwidth, 4], rawImgData);
+    let convolved = FFTConvolution(grayImage, filter);
+    labelprint("Convolved", convolved.data);
+    contextData.data.set(new Uint8ClampedArray(convolved.data));
+
     context.putImageData(contextData, 0, 0); 
 
     getLightnessValuesofImg(rawImgData, cwidth, (light) => {
@@ -164,31 +202,23 @@ img.onload = function() {
             }     
         });
     });
-    getLightnessHistogram(rawImgData, (hst) => {
+    getLightnessHistogram(jkImage, (hst) => {
         displayHistogram('svg', hst, "steelblue", 500, 1200)
     })  
 }
 
 
-function getLightnessHistogram(rawImgData, next) {
+function getLightnessHistogram(realImage, next) {
     let binCount = 101,
     max = 100,
     min = 0,
     range = max - min,
     binSize = range / binCount;
-
-    let hist = histogram(rawImgData, (rgbColor) => {
-        let Y = relativeLuminence(linearize8Bit(rgbColor));
-        return Math.round((lightness(Y) / 100) * (max));
-    },
-    binCount,
-    min,
-    max,
-    true
-    );
-    
-    next(hist.map((p, i) => {
-        return {name: (i * binSize) + min, value : p}
+   
+    let hist = new FrequencyDist(realImage.toLightness(), 101, min, max);
+    let prob = hist.toProbabilityDist();
+    next(hist.dist.map((p, i) => {
+        return {name: (i * hist.intervalSize) + hist.min, value : p}
     }));
 
     // let http = new XMLHttpRequest();

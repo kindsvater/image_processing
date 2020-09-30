@@ -1,4 +1,4 @@
-const { zeros, initArray } = require("../utility/array_util.js");
+const { zeros, initArray, toNestedArray } = require("../utility/array_util.js");
 const { roundTo } = require('../utility/num_util.js');
 
 const impulse = {
@@ -19,27 +19,47 @@ const impulse = {
         return ir;
     }
 }
-function edgeEnhance(k) { return [[-k/8,-k/8,-k/8], [-k/8,k+1,-k/8], [-k/8,-k/8,-k/8]] }
-const psf = {
-    "box" : (rows, cols) => initArray(1, [rows, cols]),
-    "delta" : edgeEnhance(0),
-    "shiftSubtract" : [[0,0,0],[0,1,0],[0,0,-1]],
-    "edgeDetect" : edgeEnhance(1),
-    "edgeEnhance" : edgeEnhance,
-    "gauss" : (m, n, scale) => {
-        let psf = [],
-        x,
-        y;
-        for (let r = 0; r < m; r++) {
-            psf[r] = [];
-            y = Math.ceil(r - (m / 2)); 
-            for (let c = 0; c < n; c++) {
-                x = Math.ceil(c - (n / 2));
-                psf[r][c] = roundTo((1 / (2 * Math.PI * scale * scale)) * Math.exp(-((x * x) + (y * y)) / (2 * scale * scale)), 4);
-            }
-        }
-        return psf;
+function edgeEnhance(k, radius=1, flat=true) {
+    let kernel = [];
+    let width = radius * 2 + 1;
+    let sizeMin1 = width * width - 1;
+
+    let halfOfNegVals = radius * width + radius;
+    for (let i = 0; i < halfOfNegVals; i++) {
+        kernel.push( -k / sizeMin1 );
     }
+    kernel.push(k + 1);
+    for (let j = 0; j < halfOfNegVals; j++) {
+        kernel.push( -k / sizeMin1);
+    }
+
+    if (!flat) kernel = toNestedArray(kernel, [width, width]);
+    return kernel;
+}
+
+//TODO: Generalize to multiple Dimensions
+function genGaussFilter(m, n, scale, flat=true) {
+    let psf = [],
+    x,
+    y;
+    for (let r = 0; r < m; r++) {
+        y = Math.ceil(r - (m / 2)); 
+        for (let c = 0; c < n; c++) {
+            x = Math.ceil(c - (n / 2));
+            psf.push(roundTo((1 / (2 * Math.PI * scale * scale)) * Math.exp(-((x * x) + (y * y)) / (2 * scale * scale)), 4));
+        }
+    }
+    if (!flat) psf = toNestedArray(psf, [m, n]);
+    return psf;
+}
+
+const psf = {
+    "box" : (rows, cols, flat=true) => initArray(1, [rows, cols], flat),
+    "delta" : (radius=1, flat=true) => edgeEnhance(0, radius, flat),
+    "shiftSubtract" : () => [[0,0,0],[0,1,0],[0,0,-1]],
+    "edgeDetect" : (radius=1, flat=true) => edgeEnhance(1, radius, flat),
+    "edgeEnhance" : edgeEnhance,
+    "gauss" : genGaussFilter
 }
 
 // function makeFilter(freqResp, filterSize) {

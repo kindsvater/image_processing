@@ -145,12 +145,20 @@ const Tensor = (function() {
         return this.data[dataIndex];
     }
     
+    $T.setExplicit = function(explicitIndex, values) {
+        if (!Array.isArray(values)) values = [values];
+        let vi = 0;
+        this.forEachExplicit(explicitIndex, (value, di) => {
+            this.data[di] = values[vi++];
+        });
+    }   
+
     $T.set = function(rangedIndex, values) {
         //If setting a single value, wrap in array.
         if (!Array.isArray(values)) values = [values]; 
         let trimmedIndex = trimRangedIndex(rangedIndex, this.rank);
         let requiredInputLength;
-        let valIndex = 0;
+        let vi = 0;
 
         if (isRangedIndex(trimmedIndex, this.shape)) {
             let reducedIndex = reduceRangedIndex(trimmedIndex, this.shape);
@@ -166,9 +174,8 @@ const Tensor = (function() {
             );
         }
         
-        this.forEachVal(rangedIndex, (value, i) => {
-            this.data[i] = values[valIndex];
-            valIndex++;
+        this.forEachVal(rangedIndex, (value, di) => {
+            this.data[di] = values[vi++];
         });
         return this;
     }
