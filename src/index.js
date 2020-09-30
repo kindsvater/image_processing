@@ -6,7 +6,7 @@ const { zeros } = require('./utility/array_util.js');
 const { randIntArray, gaussGray } = require('./stat/randomgeneration.js');
 const { impulse, psf } = require('./flatsignal/filter.js');
 const { Tensor } = require('./tensor/tensor.js');
-const { pad, padTo } = require('./tensor/tensorpad.js');
+const { pad, padTo } = require('./tensor/pad/pad.js');
 const { FrequencyDist } = require('./stat/histogram.js');
 // function checkFFT() {
 //     let r = randIntArray(0, 10, 32);
