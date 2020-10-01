@@ -1,6 +1,6 @@
 const { zeros, initArray, toNestedArray } = require("../utility/array_util.js");
 const { roundTo } = require('../utility/num_util.js');
-
+const { Tensor } = require('../tensor/tensor.js');
 const impulse = {
     "delta" : (n=16, shift=0, scale=1) => { 
         let d = zeros([n], true);
@@ -62,6 +62,45 @@ const psf = {
     "gauss" : genGaussFilter
 }
 
+function makeImageKernel(psf, height, width) {
+    let shape = [height, width];
+    //rotate180(psf);
+    let kernel = new Tensor(shape, zeros(shape, true));
+    let center = [
+        Math.floor(psf.shape[0] / 2),
+        Math.floor(psf.shape[1] / 2)
+    ];
+    let i;
+    let col;
+
+    let row = 0;
+    for (i = center[0]; i < psf.shape[0]; i++) {
+        col = kernel.shape[1] - (psf.shape[1] - center[1]);
+        for (j = 0; j < center[1]; j++) {
+            kernel.setExplicit([row, col++], psf.getExplicit([i, j]));
+        }
+        col = 0;
+        for (j = center[1]; j < psf.shape[1]; j++) {
+            kernel.setExplicit([row, col++], psf.getExplicit([i, j]));
+        }
+        row++;
+    }
+
+    row = kernel.shape[0] - (psf.shape[0] - center[0]);
+    for (i = 0; i < center[0]; i++) {
+        col = kernel.shape[1] - (psf.shape[1] - center[1]);
+        for (j = 0; j < center[1]; j++) {
+            kernel.setExplicit([row, col++], psf.getExplicit([i, j]));
+        }
+        col = 0;
+        for (j = center[1]; j < psf.shape[1]; j++) {
+            kernel.setExplicit([row, col++], psf.getExplicit([i, j]));
+        }
+        row++;
+    }
+    
+    return kernel;
+}
 // function makeFilter(freqResp, filterSize) {
 //     let ReX = freqResp
 //     let ftSize = 1024;
@@ -97,6 +136,7 @@ const psf = {
 // }
 
 module.exports = {
+    makeImageKernel,
     impulse,
     psf
 }

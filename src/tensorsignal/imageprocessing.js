@@ -1,6 +1,6 @@
 'use strict';
 const { bankRound, nextPowerOf2 } = require('../utility/num_util.js');
-const { zeros } = require('../utility/array_util.js');
+const { zeros, toNestedArray } = require('../utility/array_util.js');
 const { isPowerOfTwo } = require('../utility/type_util.js');
 const { sRGBtoXYZ, XYZtosRGB } = require('../colorspace/srgb.js');
 const { XYZtoLAB, LABtoXYZ, LAB, adjustLight } = require('../colorspace/cie.js');
@@ -241,49 +241,77 @@ function inverseFFT2DImage(complexImage, chans=3) {
     return complexImage;
 }
 
+// function multiplyFreqImage(X, H, chans, inPlace=false) {
+//     //check shapes
+//     let temp;
+//     let hi;
+//     let xi;
+//     let result = inPlace 
+//         ? X
+//         : new ComplexSignal(new Tensor(X.shape, X.real.data.slice(0)));
+
+//     for (let i = 0; i < X.shape[0]; i++) {
+//         for (let j = 0; j < H.shape[1]; j++) {
+//             for (let c = 0; c < chans; c++) {
+//                 hi = [i, j];
+//                 xi = [i, j, c];
+//                 temp = (X.getReal(xi) * H.getReal(hi)) - (X.getImag(xi) * H.getImag(hi));
+//                 result.setImag(
+//                     xi,
+//                     (X.getImag(xi) * H.getReal(hi)) + (X.getReal(xi) * H.getImag(hi))
+//                 );
+//                 result.setReal(xi, temp);
+//             }
+//         }
+//     }
+
+//     return result;
+// }
+
 function multiplyFreqImage(X, H, chans, inPlace=false) {
-    //check shapes
     let temp;
     let hi;
-    let xi;
-    let result = inPlace 
-        ? X
-        : new ComplexSignal(new Tensor(X.shape, X.real.data.slice(0)));
-
-    for (let i = 0; i < X.shape[0]; i++) {
-        for (let j = 0; j < H.shape[1]; j++) {
-            for (let c = 0; c < chans; c++) {
-                hi = [i, j];
-                xi = [i, j, c];
-                temp = (X.getReal(xi) * H.getReal(hi)) - (X.getImag(xi) * H.getImag(hi));
-                result.setImag(
-                    xi,
-                    (X.getImag(xi) * H.getReal(hi)) + (X.getReal(xi) * H.getImag(hi))
-                );
-                result.setReal(xi, temp);
-            }
-        }
+    let xi = 0;
+    
+    for (hi = 0; hi < H.real.data.length; hi++) {
+        for (let c = 0; c < 3; c++) {
+            temp = X.real.data[xi] * H.real.data[hi] - X.imag.data[xi] * H.imag.data[hi];
+            X.imag.data[xi] = X.imag.data[xi] * H.real.data[hi] + X.real.data[xi] * H.imag.data[hi];
+            X.real.data[xi] = temp;
+            xi++;
+        }  
+        xi++;
     }
 
-    return result;
+    return X;
 }
 
 function FFTConvolution(img, psf, paddingType="constant", paddingConstant=0) {
     let height = img.shape[0];
     let width = img.shape[1];
     let FFTHeight = nextPowerOf2(height * 2 - 1);
+    labelprint("Target Height", FFTHeight);
     let FFTWidth = nextPowerOf2(width * 2 - 1);
-
-    imgPadding = getPadding(img, [FFTHeight, FFTWidth], "center");
-    psfPadding = getPadding(psf, [FFTHeight, FFTWidth], "center");
-
+    labelprint("Target Width", FFTWidth);
+    labelprint("Target data size", FFTHeight * FFTWidth * 4);
+    labelprint("img before padding", img.data.slice(0));
+    let imgPadding = getPadding(img, [FFTHeight, FFTWidth], "center");
+    let psfPadding = getPadding(psf, [FFTHeight, FFTWidth], "center");
+    labelprint("image padding", imgPadding);
+    labelprint("psf Padding", psfPadding);
     pad(img, imgPadding, true, paddingType, paddingConstant);
     pad(psf, psfPadding, true, paddingType, paddingConstant);
- 
+    labelprint("Padding Image", img.data.slice(0));
+    labelprint("Padded psf", psf.data.slice(0));
     let complexFreqImg = FFT2DFromRealImage(img, 3, true);
     let complexFreqPSF = FFT2DFromRealImage(psf, 1, true);
-    let convolvedFreqImg = multiplyFreqImage(complexFreqImg, complexFreqPSF, 3);
+
+    labelprint("Frequency Image", complexFreqImg);
+    labelprint("complexFreqPSF", complexFreqPSF);
+    let convolvedFreqImg =  multiplyFreqImage(complexFreqImg, complexFreqPSF, 3);
+    labelprint("convolved Freq image", convolvedFreqImg.real.data.slice(0));
     let convolvedRealImage = inverseFFT2DImage(convolvedFreqImg, 3).real;
+    labelprint("nested convolved real", toNestedArray(convolvedRealImage.data.slice(0), convolvedRealImage.shape));
     return  depad(convolvedRealImage, imgPadding);
 }
 

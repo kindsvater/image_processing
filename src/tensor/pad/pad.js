@@ -26,7 +26,6 @@ function getPadding(tensor, toShape, placement) {
             case 1:
                 //fall-through
             case "center":
-                console.log("center");
                 paddingBefore[dim] = Math.ceil((toShape[dim] - tensorDimValue) / 2);
                 paddingAfter[dim] = Math.floor((toShape[dim] - tensorDimValue) / 2);
                 break;
@@ -49,7 +48,8 @@ function pad(tensor, padding, inplace=true, padType='constant', constant=0) {
     let padFunction = PaddingTypes[padType];
     if (!padFunction) {
         throw new Error(
-            `Provided Padding Type ${padType} is not a valid tensor padding method. Try ${PaddingTypes.keys()}`
+            `Provided Padding Type ${padType} is not a valid tensor padding method.
+             Try ${Object.keys(PaddingTypes).join(', ')}.`
         );
     }
     let newRank = tensor.rank;

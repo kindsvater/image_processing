@@ -1,8 +1,8 @@
 function Padding(before, after) {
-    if (!isArray(before)) throw new Error(
+    if (!Array.isArray(before)) throw new Error(
         `Expected argument 'before' to be an Array. Received ${typeof before} instead.`
     );
-    if (!isArray(after)) throw new Error(
+    if (!Array.isArray(after)) throw new Error(
         `Expected argument 'after' to be an Array. Received ${typeof after} instead.`
     );
     before.forEach( value => {
