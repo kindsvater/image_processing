@@ -62,43 +62,57 @@ const psf = {
     "gauss" : genGaussFilter
 }
 
+function rotate180(psf) {
+    let rotated = new Tensor(psf.shape, psf.data.slice(0));
+    for (let r = 0; r < psf.shape[0]; r++) {
+        for (let c = 0; c < psf.shape[1]; c++) {
+            rotatedIndex = [
+                psf.shape[0] - 1 - r,
+                psf.shape[1] - 1 - c
+            ];
+            rotated.setExplicit(rotatedIndex, psf.getExplicit([r, c]));
+        }
+    }
+    return rotated;
+}
+
 function makeImageKernel(psf, height, width) {
     let shape = [height, width];
-    //rotate180(psf);
+    let rotated = rotate180(psf);
     let kernel = new Tensor(shape, zeros(shape, true));
     let center = [
-        Math.floor(psf.shape[0] / 2),
-        Math.floor(psf.shape[1] / 2)
+        Math.floor(rotated.shape[0] / 2),
+        Math.floor(rotated.shape[1] / 2)
     ];
     let i;
     let col;
 
     let row = 0;
-    for (i = center[0]; i < psf.shape[0]; i++) {
-        col = kernel.shape[1] - (psf.shape[1] - center[1]);
+    for (i = center[0]; i < rotated.shape[0]; i++) {
+        col = kernel.shape[1] - (rotated.shape[1] - center[1]);
         for (j = 0; j < center[1]; j++) {
-            kernel.setExplicit([row, col++], psf.getExplicit([i, j]));
+            kernel.setExplicit([row, col++], rotated.getExplicit([i, j]));
         }
         col = 0;
-        for (j = center[1]; j < psf.shape[1]; j++) {
-            kernel.setExplicit([row, col++], psf.getExplicit([i, j]));
+        for (j = center[1]; j < rotated.shape[1]; j++) {
+            kernel.setExplicit([row, col++], rotated.getExplicit([i, j]));
         }
         row++;
     }
 
-    row = kernel.shape[0] - (psf.shape[0] - center[0]);
+    row = kernel.shape[0] - (rotated.shape[0] - center[0]);
     for (i = 0; i < center[0]; i++) {
-        col = kernel.shape[1] - (psf.shape[1] - center[1]);
+        col = kernel.shape[1] - (rotated.shape[1] - center[1]);
         for (j = 0; j < center[1]; j++) {
-            kernel.setExplicit([row, col++], psf.getExplicit([i, j]));
+            kernel.setExplicit([row, col++], rotated.getExplicit([i, j]));
         }
         col = 0;
-        for (j = center[1]; j < psf.shape[1]; j++) {
-            kernel.setExplicit([row, col++], psf.getExplicit([i, j]));
+        for (j = center[1]; j < rotated.shape[1]; j++) {
+            kernel.setExplicit([row, col++], rotated.getExplicit([i, j]));
         }
         row++;
     }
-    
+
     return kernel;
 }
 // function makeFilter(freqResp, filterSize) {
