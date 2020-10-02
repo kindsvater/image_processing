@@ -1,6 +1,6 @@
 'use strict';
 const { dim } = require('../utility/linearalg_util');
-const { zeros } = require('../utility/array_util.js');
+const { zeros } = require('../utility/array_util/init.js');
 const { bankRound } = require('../utility/num_util.js');
 const { isPowerOfTwo } = require('../utility/type_util.js');
 

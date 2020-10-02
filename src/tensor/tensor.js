@@ -1,6 +1,7 @@
 'use strict';
-const { sizeFrom, stridesFrom, isShape, toNestedArray } = require('../utility/array_util.js');
-const { reduceRangedIndex, reducedShape, trimRangedIndex, isRangedIndex } = require('../utility/rangedindex_util.js');
+const { sizeFrom, stridesFrom, isShape } = require('../utility/array_util/shape.js');
+const { toNestedArray } = require('../utility/array_util/dimension.js');
+const { reduceRangedIndex, reducedShape, trimRangedIndex, isRangedIndex } = require('../utility/array_util/rangedindex.js');
 
 const Tensor = (function() {
     function Tensor(shape, data) {

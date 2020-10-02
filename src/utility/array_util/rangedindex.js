@@ -1,11 +1,33 @@
 'use strict';
-const { stridesFrom } = require('./array_util.js');
-//End operator is Infinity
-const isEndOperator = symbol => (!isNaN(symbol) && !isFinite(symbol));
-//Range operator is an empty array
-const isRangeOperator = symbol => (Array.isArray(symbol) && symbol.length === 0);
-const isIndex = (symbol, max, min=0) => (Number.isInteger(symbol) && symbol >= min && symbol < max);
+const { stridesFrom } = require('./shape.js');
 
+
+/**
+ * Checks if symbol is the Ranged Index End Operator: Infinity.
+ * @param {*} symbol 
+ * @returns {boolean} 
+ */
+const isEndOperator = symbol => (!isNaN(symbol) && !isFinite(symbol));
+/**
+ * Checks if symbol is the Ranged Index Range Operator: an Empty Array, [].
+ * @param {*} symbol 
+ * @returns {boolean} 
+ */
+const isRangeOperator = symbol => (Array.isArray(symbol) && symbol.length === 0);
+/**
+ * Checks if symbol is valid index. Indices are integers i greater than zero where min <= i < max.
+ * @param {*}       symbol 
+ * @param {Integer} min Lowest integer value the index can take.
+ * @param {Integer} max Upper-limit of the index range. Non-inclusive. 
+ * @returns {boolean} //True if a valid index, false if not.
+ */
+const isIndex = (symbol, max, min=0) => (Number.isInteger(symbol) && symbol >= min && symbol < max);
+/**
+ * Trims redundant or unnecessary values from the end of the ranged index tensorIndex. If toRan
+ * @param {Array.<Integer>} tensorIndex   The index to trim.
+ * @param {Integer}         [toRank=null] If specified will remove indices in dimensions outside of rank.  
+ * @returns {Array.<Integer>} Trimmed Ranged Index
+ */
 const trimRangedIndex = (tensorIndex, toRank=null) => {
     let newEnd = (Number.isInteger(toRank) && tensorIndex.length > toRank) ?
                 toRank - 1 :
@@ -17,7 +39,18 @@ const trimRangedIndex = (tensorIndex, toRank=null) => {
     }
     return tensorIndex.slice(0,1);
 }
-
+/**
+ * Evaluates Array and returns whether it is a well-formed ranged index. 
+ * Ranged Indexes contain the Range Operator, placed between valid index values and/or the End Operator
+ * and are used as shorthand for a list of indices. E.g. [3, [], 45] => [3, 4,...,45], [Infinity, [], 5] => [0,1,2,3,4,5], 
+ * The Range Operator is the Empty Array Object, [].
+ * The End Operator is the value infinity, Infinity.
+ * Indices are Integers greater than zero and less than size of the dimension they are indexing.
+ * The shape array represents the size of the index of each dimension. 
+ * @param {Array.<Array.<Integer>, Integer>} rangedIndex 
+ * @param {Array.<Integer>}                  shape 
+ * @return {boolean|null} True if a well-formed ranged index. False if an explicit index. Null if not a well-formed index.
+ */
 const isRangedIndex = function(rangedIndex, shape) {
     let isRanged = false;
     for (let dim in rangedIndex) {
@@ -67,6 +100,13 @@ const isRangedIndex = function(rangedIndex, shape) {
     return isRanged;
 }
 
+/**
+ * Reduces ranged index to set of tuples containing the start and indices of each range. 
+ * Ex: [[0,[],6,2], [3,[],Infinity], [5,6]] => [[[0,7],[2,3]], [[3,46]], [[5,6][6,7]]]
+ * @param {Array.<Array.<Integer>>} rangedIndex 
+ * @param {Array.<Integer>} shape 
+ * @return {Array.<Array.<Integer>>} True if a well-formed ranged index. False if a regular index or not well-formed. 
+ */
 const reduceRangedIndex = function(rangedIndex, shape) {
     let reduced = [];
     for (let dim in rangedIndex) {
@@ -127,7 +167,11 @@ const reduceRangedIndex = function(rangedIndex, shape) {
     }
     return reduced;
 }
-
+/**
+ * Calculates and returns the shape of the reduced index
+ * @param {Array.<Array.<Integer>>} reducedIndex 
+ * @returns {Array.<Integer>} the shape of the index (how many data points are described in each dimension)
+ */
 const reducedShape = (reducedIndex) => reducedIndex.map(
     dim => dim.reduce(
         (acc, range) => acc + range[1] - range[0], 0

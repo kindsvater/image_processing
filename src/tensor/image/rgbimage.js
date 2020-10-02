@@ -1,6 +1,6 @@
-const { relativeLuminence, linearize8Bit } = require('./../colorspace/srgb.js');
-const { lightness } = require('./../colorspace/cie.js');
-const { Tensor } = require('./../tensor/tensor.js');
+const { relativeLuminence, linearize8Bit } = require('../../colorspace/srgb.js');
+const { lightness } = require('../../colorspace/cie.js');
+const { Tensor } = require('../tensor.js');
 
 const RGBImage = (function() {
     function RGBImage(img, width, a) {

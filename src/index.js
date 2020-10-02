@@ -1,9 +1,12 @@
-const { RGBImage } = require('./tensorsignal/rgbimage.js');
-const { equalizeImgLight, FFT2DFromRealImage, inverseFFT2DImage, FFTConvolution } = require('./tensorsignal/imageprocessing.js');
+const { RGBImage } = require('./tensor/image/rgbimage.js');
+const { equalizeImgLight } = require('./tensor/image/equalize.js');
+const { fft2DRealImage, ifft2DImage } = require('./tensor/image/fft2image.js');
+const { fftConvolve } = require('./tensor/image/convolve.js');
 const { relativeLuminence, linearize8Bit } = require('./colorspace/srgb.js');
 const { lightness } = require('./colorspace/cie.js');
-const { zeros, toNestedArray } = require('./utility/array_util.js');
-const { randIntArray, gaussGray } = require('./stat/randomgeneration.js');
+const { zeros } = require('./utility/array_util/init.js');
+const { toNestedArray } = require('./utility/array_util/dimension.js');
+const { randIntArray, random8BitGray } = require('./stat/randomgeneration.js');
 const { impulse, psf, makeImageKernel } = require('./flatsignal/filter.js');
 const { Tensor } = require('./tensor/tensor.js');
 const { pad, padTo, depad, Padding, getPadding } = require('./tensor/pad/pad.js');
@@ -73,8 +76,9 @@ img.onload = function() {
     let contextData = context.getImageData(0,0, cwidth, cheight);
     let rawImgData = contextData.data;
     labelprint("image pix = " + rawImgData.length, rawImgData);
-
+    labelprint("Raw Image Data", typeof rawImgData.slice(0, 400));
     let jkImage = new RGBImage(rawImgData.slice(0,400), 10, true);
+    labelprint("JKIMAGE DATA", jkImage.data);
     labelprint("Image Pixels", jkImage.toPixels(true));
     console.log(jkImage.toNestedArray());
     jkImage.size;
@@ -110,10 +114,10 @@ img.onload = function() {
     // let ww = 500;
     // let ll = 180;
 
-    let ww = 3;
-    let ll = 3;
-    let cc = 3;
-    let grays = gaussGray(ww * ll, 32);
+    let ww = cwidth;
+    let ll = cheight;
+    let cc = 9;
+    let grays = random8BitGray(ww * ll, 32);
     
     console.log(grays.length)
     let hist = [];
@@ -136,43 +140,43 @@ img.onload = function() {
     }
 
     let grayImage = new Tensor([ww, ll, 4], grayData);
-    labelprint("Pre-Fourier Gray Image", grayImage.data.slice(0));
+    //labelprint("Pre-Fourier Gray Image", grayImage.data.slice(0));
     
-    let grayPadding = getPadding(grayImage, [12, 12], "center");
+    // let grayPadding = getPadding(grayImage, [12, 12], "center");
 
-    pad(grayImage, grayPadding, true, "constant", 0);
+    // pad(grayImage, grayPadding, true, "constant", 0);
     
-    console.log("Padded Gray Image !!")
-    console.log(grayImage.data.slice(0));
+    // console.log("Padded Gray Image !!")
+    // console.log(grayImage.data.slice(0));
 
-    let complex = FFT2DFromRealImage(grayImage, 3, true);
-    labelprint("Fourier", complex.real.data.slice(0));
+    // let complex = fft2DRealImage(grayImage, 3, true);
+    // labelprint("Fourier", complex.real.data.slice(0));
 
-    inverseFFT2DImage(complex, 3);
-    let newGray = depad(complex.real, grayPadding);
-    labelprint("Inverse Fourier", newGray.data.slice(0));
+    // ifft2DImage(complex, 3);
+    // let newGray = depad(complex.real, grayPadding);
+    //labelprint("Inverse Fourier", newGray.data.slice(0));
     
     // contextData.data.set(new Uint8ClampedArray(grayImage.data));
     // labelprint("New Context Data", contextData.data);
 
-    // let filter = new Tensor([cc,cc,1], psf.gauss(cc, cc, 1));
-    // labelprint("Gauss Blur psf", filter.data.slice(0));
+    //let filter = new Tensor([cc,cc,1], psf.gauss(cc, cc, 0.5));
+    //labelprint("Gauss Blur psf", filter.data.slice(0));
 
-    // let filter = new Tensor([3, 3, 1], psf.edgeEnhance(1, 1, true));
+    let filter = new Tensor([3, 3, 1], psf.edgeEnhance(1, 1, true));
     
     // pad(filter, [3, 3], [3,3], true, "edge");
     //labelprint("Edge Enhance Filter", filter.data.slice(0));
 
-    let filter = new Tensor([3, 3, 1], psf.delta());
-    labelprint("Dirac Idenity PSF", filter.toNestedArray());
+    // let filter = new Tensor([3, 3, 1], psf.delta());
+    // labelprint("Dirac Idenity PSF", filter.toNestedArray());
 
-   // let currImage = new Tensor([cheight, cwidth, 4], rawImgData);
-    let convolved = FFTConvolution(newGray, filter);
-    labelprint("Convolved", convolved.data.slice(0));
+    let currImage = new Tensor([cheight, cwidth, 4], rawImgData);
+    let convolved = fftConvolve(currImage, filter, "symmetric");
+    
     contextData.data.set(new Uint8ClampedArray(convolved.data));
 
     context.putImageData(contextData, 0, 0); 
-
+    labelprint("Convolved", convolved.data.slice(0));
     getLightnessValuesofImg(rawImgData, cwidth, (light) => {
         let lightIdxs = {};
         let original = {};

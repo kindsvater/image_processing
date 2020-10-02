@@ -1,5 +1,5 @@
 'use strict';
-const { Tensor } = require('./tensor.js');
+const { Tensor } = require('../tensor.js');
 
 const Vector = (function() {
     function Vector(data, size) {

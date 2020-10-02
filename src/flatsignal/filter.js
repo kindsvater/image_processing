@@ -1,4 +1,5 @@
-const { zeros, initArray, toNestedArray } = require("../utility/array_util.js");
+const { zeros, initArray, } = require("../utility/array_util/init.js");
+const { toNestedArray } = require("../utility/array_util/dimension.js");
 const { roundTo } = require('../utility/num_util.js');
 const { Tensor } = require('../tensor/tensor.js');
 const impulse = {
@@ -115,39 +116,6 @@ function makeImageKernel(psf, height, width) {
 
     return kernel;
 }
-// function makeFilter(freqResp, filterSize) {
-//     let ReX = freqResp
-//     let ftSize = 1024;
-
-//     let ReX = [],
-//         T = [];
-
-//     //load frequency response
-//     for (let i = 0; i < ftSize / 2 + 1; i++) {
-//         if (i >= freqResp.length) {
-//             ReX[i] = 0;
-//         } else {
-//             ReX[i] = freqResp[i];
-//         }
-//     }
-
-//     //Shift signal filterSize / 2 points to the right
-//     for (let i = 0; i < ftSize; i++) {
-//         let ind = i + filterSize;
-//         if (ind >= ftSize) {
-//             ind = ind - ftSize;
-//         }
-//         T[ind] = ReX[i];
-//     }
-
-//     //Truncate and Window the Signal
-//     for (let k = 0; k < filterSize; k++) {
-//         if (k <= filterSize) ReX[k] *= (0.54 - 0.46 * Math.cos(2 * Math.PI * k / filterSize));
-//         if (k > filterSize) ReX[k] = 0;
-//     }
-
-//     return ReX.slice(0, filterSize + 1);
-// }
 
 module.exports = {
     makeImageKernel,

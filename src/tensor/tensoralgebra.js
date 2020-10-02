@@ -1,7 +1,7 @@
 'use strict'
 const { Tensor } = require('./tensor.js');
-const { stridesFrom, sizeFrom, zeros } = require('../utility/array_util.js');
-const { shapeToRangedIndex } = require('../utility/rangedindex_util.js');
+const { stridesFrom, sizeFrom, zeros } = require('../utility/array_util/shape.js');
+const { shapeToRangedIndex } = require('../utility/array_util/rangedindex.js');
 
 const directSum = function(A, B) {
     let newRank = Math.max(A, B);

@@ -1,4 +1,4 @@
-const { zeros } = require('../utility/array_util.js');
+const { zeros } = require('../utility/array_util/init.js');
 
 const DiscreteDistribution = (function() {
     function DiscreteDistribution(data, intervalCount, min, max) {

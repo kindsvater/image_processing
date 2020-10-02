@@ -1,6 +1,6 @@
 'use strict'
-const { Tensor } = require('./tensor.js');
-const { flatten, identity } = require('../utility/array_util.js');
+const { Tensor } = require('../tensor.js');
+const { flatten, identity } = require('../../utility/array_util.js');
 
 const Matrix = (function() {
     function Matrix(data, rows, cols) {

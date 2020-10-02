@@ -1,11 +1,13 @@
 const { clampTo } = require('../utility/num_util.js');
+const { sizeFrom } = require('../utility/array_util/shape.js');
+const { toNestedArray } = require('../utility/array_util/dimension.js');
 
 //Creates a uniform histogram of 'bins' of height a = 1/n that are the sum of 
 //probabilities of two outcomes. Probability in excess of a is distributed evenly 
 //using a RobinHood algorithm. Returns arrays K and V where K is indices of
 //the outcomes in the upper halves of each bin and V is the probability of the
 //outcome in the lower halves of the bins. 
-function robinHoodSquaredProbHistogram(p) {
+function robinHoodProbHist(p) {
     let K = []; //Indices corresponding to top of bar
     let V = []; //Bar division point
     let n = p.length;
@@ -42,7 +44,7 @@ function robinHoodSquaredProbHistogram(p) {
 //A probability histogram is represented by the arrays K and V
 //First generates a random float from 0 through 1. 
 //stored in arr
-function randProbHistogramInt(K, V) {
+function randProbHistInt(K, V) {
     //check that K and V are arrays of the same length
     let n = K.length;
     let U = Math.random();
@@ -54,17 +56,17 @@ function randProbHistogramInt(K, V) {
 }
 
 //Returns an integer greater or equal to min and less than (min + range).
-function randInt(min, range) {
-    return Math.floor(Math.random() * range) + min;
-}
-
-//Generates list of N random integers greater or equal to min and less than (min + range).
-function randIntArray(min, range, n=1) {
-    let ra = [];
-    for (let i = 0; i < n; i++) {
-        ra[i] = randInt(min, range);
+function randUniformInt(min, range, shape=1) {
+    let n = sizeFrom(shape);
+    if (n === 1) {
+        return Math.floor(Math.random() * range) + min;
     }
-    return ra;
+    let randVals = [];
+    for (let i = 0; i < n; i++) {
+        randVals[i] = Math.floor(Math.random() * range) + min;
+    }
+    toNestedArray(randVals, shape);
+    return randVals;
 }
 
 //Generates random values in the normal distribution from two uniform random numbers from the unit interval.
@@ -96,29 +98,41 @@ function gaussBoxMuller(mean, stdDev, xy=false) {
     return normRand * stdDev + mean;
 }
 
-//Generates random gray value from gaussian distribution. Suggested stdDeviations: 16, 32, 54
-function gaussGray(res, stdDev, mean=128) {
-    let randGray = [],
-        p = 0,
-        gVal;
+function randGaussian(mean, stdDev, shape) {
+    let n = sizeFrom(shape);
+    let randomVals = [];
+    let rvi = 0;
 
-    if (res % 2 === 1) {
-       gVal = clampTo(Math.round(gaussBoxMuller(mean, stdDev, false)),0, 255, false);
-       randGray.push(gVal);
-       p++;
+    if (n % 2 === 1) {
+        randomVals[rvi++] = BoxMuller(false) * stdDev + mean;
     }
-    while (p < res) {
-        gVal = gaussBoxMuller(mean, stdDev, true);
-        randGray.push(Math.round(clampTo(gVal[0], 0, 255, true)));
-        randGray.push(Math.round(clampTo(gVal[1], 0, 255, true)));
-        p += 2;
+    while (rvi < n) {
+        let xy = BoxMuller(true);
+        randomVals[rvi++] = xy[0] * stdDev + mean;
+        randomVals[rvi++] = xy[1] * stdDev + mean;
     }
-    return randGray;
+    toNestedArray(randomVals, shape);
+    return randomVals;
 }
 
-module.exports.rhSquaredProbHist = robinHoodSquaredProbHistogram;
-module.exports.randPHistInt = randProbHistogramInt;
-module.exports.randInt = randInt;
-module.exports.gaussGray = gaussGray;
-module.exports.randIntArray = randIntArray;
+function randNormal(shape) {
+    return randGaussian(0, 1, shape);
+}
+
+//Generates n random gray value from gaussian distribution. Suggested stdDeviations: 16, 32, 54
+function random8BitGray(n, stdDev, mean=128) {
+    let randGaussVals = randGaussian(mean, stdDev, n);
+    return randGaussVals.map( 
+        randVal => clampTo(Math.round(randVal), 0, 255, false)
+    );
+}
+
+module.exports = {
+    robinHoodProbHist,
+    randProbHistInt,
+    randUniformInt,
+    randGaussian,
+    randNormal,
+    random8BitGray
+}
 

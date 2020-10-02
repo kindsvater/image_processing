@@ -1,7 +1,7 @@
 'use strict'
-const { shallowEquals } = require('../utility/type_util.js');
-const { zeros } = require('../utility/array_util.js');
-const { Tensor } = require('./../tensor/tensor.js');
+const { shallowEquals } = require('../../utility/type_util.js');
+const { zeros } = require('../../utility/array_util/init.js');
+const { Tensor } = require('../tensor.js');
 
 const ComplexSignal = (function() {
     function ComplexSignal(real, imag=null) {
