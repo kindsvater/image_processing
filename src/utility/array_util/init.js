@@ -79,9 +79,23 @@ function identity(size, flat=false) {
     return arr;
 }
 
+function repeat(sequence, repetitions) {
+    let repeated = [];
+    let rai = 0;
+
+    for (let r = 0; r < repetitions; r++) {
+        for (let i = 0; i < sequence.length; i++) {
+            repeated[rai++] = sequence[i];
+        }
+    }
+    
+    return repeated;
+}
+
 module.exports = {
     initArray,
     zeros,
     ones,
-    identity
+    identity,
+    repeat
 }

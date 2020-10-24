@@ -2,6 +2,8 @@ const { RGBImage } = require('./tensor/image/rgbimage.js');
 const { equalizeImgLight } = require('./tensor/image/equalize.js');
 const { fft2DRealImage, ifft2DImage } = require('./tensor/image/fft2image.js');
 const { fftConvolve } = require('./tensor/image/convolve.js');
+const { initBlackImage, initWhiteImage } = require('./tensor/image/init.js');
+const { addNoise } = require('./tensor/image/noise.js');
 const { relativeLuminence, linearize8Bit } = require('./colorspace/srgb.js');
 const { lightness } = require('./colorspace/cie.js');
 const { zeros } = require('./utility/array_util/init.js');
@@ -11,7 +13,7 @@ const { impulse, psf, makeImageKernel } = require('./flatsignal/filter.js');
 const { Tensor } = require('./tensor/tensor.js');
 const { pad, padTo, depad, Padding, getPadding } = require('./tensor/pad/pad.js');
 const { FrequencyDist } = require('./stat/histogram.js');
-
+const { createTextElement, addTextToElement, setAttributes, createElementWithAttributes } = require('./utility/dom_util.js');
 // function checkFFT() {
 //     let r = randIntArray(0, 10, 32);
 //     let i = zeros(32);
@@ -24,6 +26,55 @@ const { FrequencyDist } = require('./stat/histogram.js');
 //     console.log(r);
 //     console.log(i);
 // }
+let layers = [document.getElementById];
+function appendLayerListElement(rootNode, layerNumber) {
+    let layerListElement = document.getElementById('layer-list');
+    let layerRadio = createElementWithAttributes(
+        'input',
+        {
+            'id' : 'l' + layerNumber,
+            'type' : 'radio',
+            'name' : 'layerIndex',
+            'value' : layerNumber,
+        }
+    );
+    let layerLabel = createElementWithAttributes(
+        'label',
+        {
+            'for' : 'l' + layerNumber,
+        }
+    );
+    let labelEdit = createElementWithAttributes(
+        'span',
+        {
+            'contenteditable' : 'true',
+            'text' : 'New Layer ' + layerNumber,
+        }
+    );
+
+    layerRadio.addEventListener('click', changeVisibleLayer(layerNumber));
+    layerLabel.appendChild(labelEdit);
+    layerListElement.appendChild(layerRadio);
+    layerListElement.appendChild(layerLabel);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const layers = [document.createElement('svg')];
+    const board = document.getElementById('image-board');
+    let layerListRoot = document.getElementById('add-layer');
+    appendLayerListElement(layerListRoot, 1);
+    
+    document.getElementById('add-layer').addEventListener(
+        'click',
+        appendBoardLayer();
+        appendLayerListElement(layerListRoot, layers.length);
+        
+});
+
+
+document.getElementById('add-layer').on('click', () => {
+
+});
 
 function labelprint(label, data) {
     console.log(label);
@@ -31,23 +82,27 @@ function labelprint(label, data) {
 }
 
 let img = new Image();
+let pickedImage
 let animate = false;
 let odd = true;
 const lValRange = 255;
 const gradientSize = 25;
 const gradOffset = 15;
 const timestep = 30;
-img.src = 'img/flowers.jpg';
+
 
 img.onload = function() {
-    let kern = makeImageKernel(new Tensor([4, 6], [
-        0,1,2,3,4,5,
-        6,7,8,9,10,11,
-        12,13,14,15,16,17,
-        18,19,20,21,22,23
-    ]),
-    24,
-    24
+    
+
+    let kern = makeImageKernel(
+        new Tensor([4, 6], [
+            0,1,2,3,4,5,
+            6,7,8,9,10,11,
+            12,13,14,15,16,17,
+            18,19,20,21,22,23
+        ]),
+        24,
+        24
     )
     console.log(kern.toNestedArray());
     let data = [0,1,2,3,4,5,6,7,8];
@@ -170,13 +225,16 @@ img.onload = function() {
     // let filter = new Tensor([3, 3, 1], psf.delta());
     // labelprint("Dirac Idenity PSF", filter.toNestedArray());
 
-    let currImage = new Tensor([cheight, cwidth, 4], rawImgData);
-    let convolved = fftConvolve(currImage, filter, "symmetric");
-    
-    contextData.data.set(new Uint8ClampedArray(convolved.data));
+    //let currImage = new Tensor([cheight, cwidth, 4], rawImgData);
+    //let convolved = fftConvolve(currImage, filter, "symmetric");
+    //contextData.data.set(new Uint8ClampedArray(convolved.data));
+    //labelprint("Convolved", convolved.data.slice(0));
+    let blackImage = initBlackImage(ww, ll, true);
+    addNoise(blackImage, 0.25, true);
+    contextData.data.set(new Uint8ClampedArray(blackImage.data));
 
     context.putImageData(contextData, 0, 0); 
-    labelprint("Convolved", convolved.data.slice(0));
+    
     getLightnessValuesofImg(rawImgData, cwidth, (light) => {
         let lightIdxs = {};
         let original = {};
@@ -225,6 +283,7 @@ img.onload = function() {
     })  
 }
 
+img.src = 'img/flowers.jpg';
 
 function getLightnessHistogram(realImage, next) {
     let binCount = 101,

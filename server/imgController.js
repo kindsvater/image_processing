@@ -4,7 +4,7 @@ const { lightnessToASCII, lightnessToGrayscale, rgbaGradient } = require("../src
 const { lightness, XYZtoLAB, LABtoXYZ, illuminant } = require("../src/colorspace/cie.js");
 const { loadChanTreeFile, randomColorFromChanTreeBuff } = require("../rgblightness/randcoloroflightness.js");
 const { histogram } = require("../src/flatsignal/imageProcessing.js");
-const { RGBImage } = require("../src/tensorsignal/rgbimage.js");
+const { RGBImage } = require("../src/tensor/image/rgbimage.js");
 const treeBuffPath = './rgblightness/255buff/ct' //'cieBuff/ct'
 
 function imgToRGBA(rawImgData) {

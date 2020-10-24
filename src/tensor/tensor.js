@@ -2,6 +2,7 @@
 const { sizeFrom, stridesFrom, isShape } = require('../utility/array_util/shape.js');
 const { toNestedArray } = require('../utility/array_util/dimension.js');
 const { reduceRangedIndex, reducedShape, trimRangedIndex, isRangedIndex } = require('../utility/array_util/rangedindex.js');
+const dimension = require('../utility/array_util/dimension.js');
 
 const Tensor = (function() {
     function Tensor(shape, data) {
@@ -184,6 +185,25 @@ const Tensor = (function() {
     $T.setAtDI = function(dataIndex, value) {
         this.data[dataIndex] = value;
         return this;
+    }
+
+    $T.getDimensionIndex = function(dimension, dataIndex) {
+        if (dimension >= this.rank || dimension < 0) return null;
+        let dimIndex;
+        for (let dim = 0; dim <= dimension; dim++) {
+            dimIndex = Math.floor(dataIndex / this.strides[dim]);
+            dataIndex = dataIndex % this.strides[dim];
+        }
+        return dimIndex;
+    }
+
+    $T.getExplicitIndex = function(dataIndex) {
+        let explicitIndex = [];
+        for (let dim = 0; dim < this.rank; dim++) {
+            explicitIndex[dim] = Math.floor(dataIndex / this.strides[dim]);
+            dataIndex = dataIndex % this.strides[dim];
+        }
+        return explicitIndex;
     }
 
     $T.update = function(shape, data=null) {

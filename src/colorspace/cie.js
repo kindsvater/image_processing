@@ -18,6 +18,14 @@ const illuminant = {
     'D65' : [0.9505, 1.0000, 1.0890], //Daylight at Noon. 
     'none' : [2.0, 2.0, 2.0]
 }
+const makeSetVal = (valIndex, valName, minChanVals, defaultMaxChanVals) => (color, newVal, maxChanVals) => {
+    if (!maxChanVals) maxChanVals = defaultMaxChanVals;
+    if (newVal < minChanVals[valIndex] || newVal > maxChanVals[valIndex]) {
+        throw new Error(`${valName} value ${newVal} out of range (0 - ${maxChanVals[valIndex]})`);
+    }
+    color[valIndex] = newVal;
+    return color;
+}
 
 const XYZ = {
     color: (X, Y, Z, refWhite=illuminant.D65, clamp=false) => {
@@ -42,12 +50,15 @@ const XYZ = {
     xStim : xyz => xyz[0],
     yStim : xyz => xyz[1],
     zStim : xyz => xyz[2],
+    setX : makeSetVal(0, "X Stimulus", [0,0,0], illuminant.D65),
+    setY : makeSetVal(1, "Y Stimulus", [0,0,0], illuminant.D65),
+    setZ : makeSetVal(2, "Z Stimulus", [0,0,0], illuminant.D65)
 }
 
 //The CIE LAB color space is a device invariant representation of color that is designed to be
 // perceptually uniform - there is a linear relationship between the apparent difference and the
 // numerical differance of two colors. 
-//L : 0 <= L <= 100. Pereceived lightness of the color (0=Black 100=Lightest White**)
+//L : 0 <= L <= 100. Persceived lightness of the color (0=Black 100=Lightest White**)
     //** Lightest White is relative to an illuminant.
 //a and b represent the chromaticity of the color.
 //a : -128 <= a <= 128. Position between red and green (-128 = red, 128 = green)
@@ -59,16 +70,17 @@ const LAB = {
         }
         if (!inNormalUnitInterval(L)) throw new Error( "Lightness value " + L + " must be in range 0 to 100");
         if (!(A >= -128 && A <= 128)) throw new Error("A value " + A + " must be in range -128 to 128 " + L + " " + B);
-        if (!(B >= -128 && B <= 128)) throw new Error("A value " + B + " must be in range -128 to 128");
+        if (!(B >= -128 && B <= 128)) throw new Error("B value " + B + " must be in range -128 to 128");
 
         return [L, A, B];
     }, 
     LVal : lab => lab[0],
     AVal : lab => lab[1],
     BVal : lab => lab[2],
+    setL : makeSetVal(0, "Lightness", [0, -128, -128], [100, 128, 128]),
+    setA : makeSetVal(1, "A Chroma", [0, -128, -128], [100, 128, 128]),
+    setB : makeSetVal(2, "B Chroma", [0, -128, -128], [100, 128, 128])
 }
-
-
 
 //Given RGB tristimulus values in the unit interval, returns luminance  
 //or brightness of the color relative to reference white D65. Luminence is a 

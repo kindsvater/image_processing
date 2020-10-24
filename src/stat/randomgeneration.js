@@ -98,11 +98,12 @@ function gaussBoxMuller(mean, stdDev, xy=false) {
     return normRand * stdDev + mean;
 }
 
-function randGaussian(mean, stdDev, shape) {
+function randGaussian(mean, stdDev, shape=[1]) {
     let n = sizeFrom(shape);
+    if (n === 1) return BoxMuller(false) * stdDev + mean;
     let randomVals = [];
     let rvi = 0;
-
+    
     if (n % 2 === 1) {
         randomVals[rvi++] = BoxMuller(false) * stdDev + mean;
     }
@@ -115,7 +116,7 @@ function randGaussian(mean, stdDev, shape) {
     return randomVals;
 }
 
-function randNormal(shape) {
+function randNormal(shape=[1]) {
     return randGaussian(0, 1, shape);
 }
 

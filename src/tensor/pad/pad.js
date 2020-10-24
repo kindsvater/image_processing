@@ -1,4 +1,4 @@
-const { stridesFrom } = require('../../utility/array_util.js');
+const { stridesFrom } = require('../../utility/array_util/shape.js');
 const PaddingTypes = require('./paddingtypes.js');
 const { Tensor } = require('../tensor.js');
 const { Padding } = require('./padding.js');

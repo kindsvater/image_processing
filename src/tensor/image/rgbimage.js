@@ -14,7 +14,7 @@ const RGBImage = (function() {
     const $RGBI = RGBImage.prototype;
 
     $RGBI.tupleSize = function() {
-        return this.shape[3];
+        return this.shape[2];
     }
     $RGBI.imageSize = function() {
         return this.width * this.height;
@@ -28,13 +28,13 @@ const RGBImage = (function() {
         this.forEachVal(range, (value, dataIndex) => {
             pixel[chanIndex++] = value;
             if (chanIndex === totalChans) {
-                callbackFn(pixel, dataIndex - chanIndex + 1); //Helpful to pass along the tensorIndex?
+                let explicitIndex = this.getExplicitIndex(dataIndex); 
+                callbackFn(pixel, explicitIndex[0], explicitIndex[1]);
                 pixel = [];
                 chanIndex = 0;
             }
         });
     }
-
     $RGBI.toPixels = function(a=false) {
         let pixelList = [];
         let endIndex = 0;
@@ -70,6 +70,12 @@ const RGBImage = (function() {
 
     $RGBI.pixelAt = function(rowIndex, colIndex) {
         return this.getExplicit([rowIndex, colIndex]);
+    }
+    $RGBI.setPixelAt = function(row, column, color) {
+        let chans = this.tupleSize < color.length ? this.tupleSize : color.length;
+        for (let cc = 0; cc < chans; cc++) {
+            this.setExplicit([row, column, cc], color[cc]);
+        }
     }
     $RGBI.redChannelAt = function(rowIndex, colIndex) {
         return this.getExplicit([rowIndex, colIndex, 0]);
